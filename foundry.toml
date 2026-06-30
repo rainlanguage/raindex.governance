@@ -1,3 +1,7 @@
+[package]
+name = "raindex-governance"
+version = "0.1.0"
+
 [profile.default]
 src = "src"
 out = "out"
@@ -8,9 +12,10 @@ bytecode_hash = "none"
 cbor_metadata = false
 optimizer = true
 optimizer_runs = 1000000
+fs_permissions = [{ access = "read", path = "./out" }]
 
-[rpc_endpoints]
-base = "https://mainnet.base.org"
+[fuzz]
+runs = 5096
 
 [soldeer]
 recursive_deps = false
@@ -21,3 +26,11 @@ rain-interpreter-interface = "0.1.0"
 rain-math-float = "0.1.1"
 raindex-interface = "0.1.2"
 "@openzeppelin-contracts" = "5.1.0"
+
+[rpc_endpoints]
+base = "${BASE_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+
+[etherscan]
+base = { key = "${CI_DEPLOY_BASE_ETHERSCAN_API_KEY}" }
+base_sepolia = { key = "${CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY}" }

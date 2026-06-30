@@ -66,4 +66,6 @@ Raindex OrderBook — no mocks. Set the `base` RPC endpoint in `foundry.toml`.
 
 ## License
 
-MIT
+[LicenseRef-DCL-1.0](./LICENSES/LicenseRef-DCL-1.0.txt) — the DecentraLicense, as
+used across the Rain language repositories. This repo is [REUSE](https://reuse.software)
+compliant.

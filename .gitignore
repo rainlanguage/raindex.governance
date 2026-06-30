@@ -1,4 +1,13 @@
-out/
-cache/
-dependencies/
-broadcast/
+out
+cache
+dependencies
+broadcast
+.direnv
+target
+temp
+dist
+node_modules
+.env
+.fixes
+.pre-commit-config.yaml
+.claude
