@@ -1,0 +1,8 @@
+forge-std/=dependencies/forge-std-1.16.1/src/
+forge-std-1.16.1/=dependencies/forge-std-1.16.1/
+rain-interpreter-interface-0.1.0/=dependencies/rain-interpreter-interface-0.1.0/
+rain-math-float-0.1.1/=dependencies/rain-math-float-0.1.1/
+raindex-interface-0.1.2/=dependencies/raindex-interface-0.1.2/
+openzeppelin-contracts/=dependencies/@openzeppelin-contracts-5.1.0/
+@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.1.0/
+@openzeppelin-contracts-5.1.0/=dependencies/@openzeppelin-contracts-5.1.0/

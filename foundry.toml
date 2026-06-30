@@ -1,0 +1,23 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["dependencies"]
+solc = "0.8.25"
+evm_version = "cancun"
+bytecode_hash = "none"
+cbor_metadata = false
+optimizer = true
+optimizer_runs = 1000000
+
+[rpc_endpoints]
+base = "https://mainnet.base.org"
+
+[soldeer]
+recursive_deps = false
+
+[dependencies]
+forge-std = "1.16.1"
+rain-interpreter-interface = "0.1.0"
+rain-math-float = "0.1.1"
+raindex-interface = "0.1.2"
+"@openzeppelin-contracts" = "5.1.0"
