@@ -118,16 +118,22 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
 
     /// @notice Pull `depositAmount` of `token` from the caller and deposit it
     /// into `vaultId`. The caller must have approved this contract for `token`.
-    /// @dev Drop-in `IRaindexV6.deposit4` signature. We pull
-    /// `toFixedDecimal(depositAmount)` from `msg.sender` using the identical
-    /// conversion Raindex uses to pull from us, so the amounts line up.
+    /// @dev Drop-in `IRaindexV6.deposit4` signature. Raindex's `pullTokens`
+    /// converts the `Float` to raw units and **rounds a lossy truncation UP**
+    /// (it pulls `toFixedDecimal(depositAmount)` and adds 1 when the conversion
+    /// wasn't exact). We must pull that same rounded-UP amount from the caller,
+    /// otherwise for a sub-precision Float the extra unit Raindex takes from us
+    /// would come out of this contract's own balance (the shared pool) — or the
+    /// deposit would revert. So we round up here to match, byte-for-byte, what
+    /// Raindex will pull from us.
     function deposit4(address token, bytes32 vaultId, Float depositAmount, TaskV2[] calldata tasks)
         external
         onlyAdminOrOperator
         whenNotPaused
         nonReentrant
     {
-        uint256 amount = _fromFloat(depositAmount, token);
+        (uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(IERC20Metadata(token).decimals());
+        if (!exact) amount += 1; // mirror Raindex pullTokens' round-up
         SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);
         _ensureRaindexApproval(token, amount);
         RAINDEX.deposit4(token, vaultId, depositAmount, tasks);

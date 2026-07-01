@@ -51,7 +51,15 @@ contract RaindexInventoryForkTest is Test {
     /// `decimals()` call. If it did, evaluating it as an argument right after a
     /// single-shot `vm.prank` would consume the prank and the real
     /// deposit4/withdraw4 would run unpranked.
-    function _float(address, /*token*/ uint256 amount) internal pure returns (Float f) {
+    function _float(
+        address,
+        /*token*/
+        uint256 amount
+    )
+        internal
+        pure
+        returns (Float f)
+    {
         (f,) = LibDecimalFloat.fromFixedDecimalLossyPacked(amount, 6);
     }
 
@@ -271,5 +279,25 @@ contract RaindexInventoryForkTest is Test {
         vm.prank(admin);
         inv.rescue(USDC, 42e6);
         assertEq(IERC20(USDC).balanceOf(admin) - adminBefore, 42e6, "admin swept stray dust");
+    }
+
+    function test_deposit_lossyFloat_chargesRoundedUp_noPoolDip() external {
+        // A sub-precision Float (1.0000005 USDC, needs 7 dp) is LOSSY at USDC's 6
+        // dp. Raindex.pullTokens rounds the truncation UP (pulls 1.000001 from
+        // us), so deposit4 must charge the caller the same rounded-UP amount. If
+        // it charged the round-DOWN amount (the pre-fix bug), Raindex would try
+        // to pull 1 unit more than we received — dipping into the contract's own
+        // balance (the shared pool) or, with no free balance, reverting.
+        (Float f,) = LibDecimalFloat.fromFixedDecimalLossyPacked(10_000_005, 7); // 1.0000005
+        uint256 roundedUp = 1_000_001; // 1.000001 at 6 dp
+        deal(USDC, operator, roundedUp);
+        vm.startPrank(operator);
+        IERC20(USDC).approve(address(inv), roundedUp);
+        inv.deposit4(USDC, VAULT, f, new TaskV2[](0)); // pre-fix: reverts here
+        vm.stopPrank();
+        // Caller was charged the rounded-UP amount (its whole balance), so
+        // Raindex's round-up pull is fully funded and the pool is never touched.
+        assertEq(IERC20(USDC).balanceOf(operator), 0, "caller charged the rounded-UP raw amount");
+        assertGt(_vaultRaw(USDC, VAULT), 0, "vault credited");
     }
 }
