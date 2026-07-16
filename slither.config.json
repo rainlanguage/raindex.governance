@@ -1,4 +1,4 @@
 {
   "detectors_to_exclude": "unused-imports,solc-version,dead-code,different-pragma-directives-are-used,assembly-usage,similar-names,naming-convention",
-  "filter_paths": "test/,dependencies/forge-std,dependencies/@openzeppelin-contracts-5.1.0,dependencies/raindex-interface-0.1.2,dependencies/rain-math-float-0.1.1"
+  "filter_paths": "test/,dependencies/forge-std,dependencies/@openzeppelin-contracts-5.1.0,dependencies/raindex-interface-0.1.2,dependencies/rain-math-float-0.1.1,dependencies/rain-interpreter-interface"
 }

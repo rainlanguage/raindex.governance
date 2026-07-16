@@ -99,6 +99,10 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @dev Drop-in `IRaindexV6.withdraw4` signature. The amount actually
     /// withdrawn is measured by balance delta (Raindex withdraws `min(target,
     /// vault balance)`), then forwarded to `msg.sender`.
+    // The balance-delta reads around `RAINDEX.withdraw4` are how we measure the
+    // actually-withdrawn amount; the function is `nonReentrant` so the external
+    // call cannot re-enter.
+    //slither-disable-next-line reentrancy-balance
     function withdraw4(address token, bytes32 vaultId, Float targetAmount, TaskV2[] calldata tasks)
         external
         onlyAdminOrOperator
@@ -177,6 +181,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     }
 
     function quote2(QuoteV2 calldata quoteConfig) external view returns (bool, Float, Float) {
+        //slither-disable-next-line unused-return
         return RAINDEX.quote2(quoteConfig);
     }
 
@@ -211,6 +216,8 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     }
 
     function _fromFloat(Float f, address token) internal view returns (uint256) {
+        // Withdraw path floors: the discarded `exact` bool is deliberate.
+        //slither-disable-next-line unused-return
         (uint256 amount,) = f.toFixedDecimalLossy(IERC20Metadata(token).decimals());
         return amount;
     }
