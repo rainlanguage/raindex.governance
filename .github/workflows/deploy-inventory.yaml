@@ -1,0 +1,53 @@
+name: Deploy RaindexInventory
+# Manual, parameterised deploy of a fresh RaindexInventory. Not the shared
+# rainix reusable workflow: that one only forwards a `suite` string, whereas a
+# RaindexInventory needs its two constructor args (admin, raindex) supplied at
+# dispatch — and this neutral repo must bake in no deployment-specific
+# addresses. Uses the same PRIVATE_KEY / RPC / Etherscan secrets as every other
+# rain deploy, and the repo's own pinned nix dev shell for forge.
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: "Network to deploy to (foundry.toml rpc_endpoint)"
+        required: true
+        type: choice
+        options:
+          - base
+          - base-sepolia
+      admin:
+        description: "DEFAULT_ADMIN_ROLE holder — the inventory owner"
+        required: true
+        type: string
+      raindex:
+        description: "Raindex OrderBook (IRaindexV6) address"
+        required: true
+        type: string
+      verify:
+        description: "Verify on the block explorer"
+        required: false
+        default: true
+        type: boolean
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rainlanguage/rainix/.github/actions/nix-cachix-setup@main
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Install soldeer dependencies
+        if: hashFiles('soldeer.lock') != ''
+        run: nix develop -c forge soldeer install
+      - name: Deploy RaindexInventory
+        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ inputs.verify && '--verify' || '' }}
+        env:
+          DEPLOYMENT_SUITE: ${{ inputs.network }}
+          DEPLOYMENT_KEY: ${{ secrets.PRIVATE_KEY }}
+          INVENTORY_ADMIN: ${{ inputs.admin }}
+          INVENTORY_RAINDEX: ${{ inputs.raindex }}
+          BASE_RPC_URL: ${{ secrets.RPC_URL_BASE_FORK || vars.RPC_URL_BASE_FORK || '' }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.RPC_URL_BASE_SEPOLIA_FORK || vars.RPC_URL_BASE_SEPOLIA_FORK || '' }}
+          CI_DEPLOY_BASE_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || '' }}
+          CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || '' }}
