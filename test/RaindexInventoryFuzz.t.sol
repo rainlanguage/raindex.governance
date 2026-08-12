@@ -74,9 +74,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
 
         vm.prank(operator);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                RaindexInventory.InsufficientVaultLiquidity.selector, USDC, requested, vaultAmount
-            )
+            abi.encodeWithSelector(RaindexInventory.InsufficientVaultLiquidity.selector, USDC, requested, vaultAmount)
         );
         inv.withdraw4(USDC, VAULT, _float(requested), _noTasks());
     }
@@ -193,9 +191,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         } else {
             vm.prank(operator2);
             vm.expectRevert(
-                abi.encodeWithSelector(
-                    RaindexInventory.InsufficientVaultLiquidity.selector, USDC, second, remaining
-                )
+                abi.encodeWithSelector(RaindexInventory.InsufficientVaultLiquidity.selector, USDC, second, remaining)
             );
             inv.withdraw4(USDC, VAULT, _float(second), _noTasks());
             assertEq(IERC20(USDC).balanceOf(operator2), 0, "loser gets nothing, not a partial fill");

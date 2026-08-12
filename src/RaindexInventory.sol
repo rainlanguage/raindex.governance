@@ -249,11 +249,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @return exists Whether the quoted order exists.
     /// @return outputMax The maximum output as a Raindex decimal Float.
     /// @return ioRatio The input:output ratio as a Raindex decimal Float.
-    function quote2(QuoteV2 calldata quoteConfig)
-        external
-        view
-        returns (bool exists, Float outputMax, Float ioRatio)
-    {
+    function quote2(QuoteV2 calldata quoteConfig) external view returns (bool exists, Float outputMax, Float ioRatio) {
         //slither-disable-next-line unused-return
         return RAINDEX.quote2(quoteConfig);
     }
