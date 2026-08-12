@@ -146,6 +146,8 @@ contract DonatingERC20 {
 contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
     using LibDecimalFloat for Float;
 
+    event OperatorWithdraw(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
+
     bytes32 internal constant EVIL_VAULT = bytes32(uint256(0xe1));
 
     /// @dev The guard, not the RBAC gate, must be what stops a re-entrant
@@ -231,6 +233,10 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         donor.setDonation(address(inv), 2e6);
 
         uint256 opBefore = donor.balanceOf(operator);
+        // The event must report what was RECEIVED (and forwarded), not the
+        // request.
+        vm.expectEmit(true, true, true, true, address(inv));
+        emit OperatorWithdraw(operator, address(donor), EVIL_VAULT, 7e6);
         vm.prank(operator);
         inv.withdraw4(address(donor), EVIL_VAULT, _float(5e6), _noTasks());
 
