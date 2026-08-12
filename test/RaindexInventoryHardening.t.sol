@@ -12,6 +12,9 @@ import {
     QuoteV2
 } from "raindex-interface-0.1.2/src/interface/deprecated/v5/IOrderBookV5.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.1.1/src/lib/LibDecimalFloat.sol";
+import {EvaluableV4} from "rain-interpreter-interface-0.1.0/src/interface/IInterpreterCallerV4.sol";
+import {IInterpreterV4} from "rain-interpreter-interface-0.1.0/src/interface/IInterpreterV4.sol";
+import {IInterpreterStoreV3} from "rain-interpreter-interface-0.1.0/src/interface/IInterpreterStoreV3.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -259,6 +262,40 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         assertTrue(exists);
         assertEq(Float.unwrap(outputMax), bytes32(uint256(7)));
         assertEq(Float.unwrap(ioRatio), bytes32(uint256(9)));
+        vm.clearMockedCalls();
+    }
+
+    // ---- tasks are forwarded VERBATIM on the fund paths (round-2 mutants
+    // WT, DT survived: every prior test passed empty tasks) ----
+
+    /// @dev A recognizable non-empty task; never executed (the Raindex call is
+    /// mocked), it only has to survive the abi.encode round-trip byte-exactly.
+    function _dummyTasks() internal pure returns (TaskV2[] memory tasks) {
+        tasks = new TaskV2[](1);
+        tasks[0].evaluable = EvaluableV4(
+            IInterpreterV4(address(0xdeadbeef)), IInterpreterStoreV3(address(0xcafe)), hex"c0de"
+        );
+    }
+
+    function test_withdraw4_forwardsTasksToRaindex() external {
+        TaskV2[] memory tasks = _dummyTasks();
+        Float zero = _float(0);
+        bytes memory expected = abi.encodeCall(IRaindexV6.withdraw4, (USDC, VAULT, zero, tasks));
+        vm.mockCall(address(RAINDEX), expected, "");
+        vm.expectCall(address(RAINDEX), expected);
+        vm.prank(operator);
+        inv.withdraw4(USDC, VAULT, zero, tasks);
+        vm.clearMockedCalls();
+    }
+
+    function test_deposit4_forwardsTasksToRaindex() external {
+        TaskV2[] memory tasks = _dummyTasks();
+        Float zero = _float(0);
+        bytes memory expected = abi.encodeCall(IRaindexV6.deposit4, (USDC, VAULT, zero, tasks));
+        vm.mockCall(address(RAINDEX), expected, "");
+        vm.expectCall(address(RAINDEX), expected);
+        vm.prank(operator);
+        inv.deposit4(USDC, VAULT, zero, tasks);
         vm.clearMockedCalls();
     }
 
