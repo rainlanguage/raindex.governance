@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2026-08-12T11:33:18Z",
+    "commit": "017eca71a5fe",
+    "publishedTag": "v0.1.0",
+    "commitsAheadOfTag": 7,
+    "scope": "whole repo",
+    "tool": "adversarial-mutation-test",
+    "skillVersion": "0.30.0",
+    "summary": {
+      "behaviours": 45,
+      "probes": 35,
+      "killedByExistingSuite": 23,
+      "survivorsClosedByNewTests": 27,
+      "candidates": 2,
+      "confirmed": 2,
+      "filed": ["#4", "#5"]
+    }
+  }
+]
