@@ -23,6 +23,7 @@ contract ReentrantERC20 {
     address public target;
     bytes public reentryCalldata;
     bool public armed;
+    uint256 public skipHooks;
     bool internal inFlight;
     bool public reentrySucceeded;
     bytes4 public reentryRevertSelector;
@@ -32,9 +33,12 @@ contract ReentrantERC20 {
         totalSupply += amount;
     }
 
-    function arm(address target_, bytes calldata reentryCalldata_) external {
+    /// @param skipHooks_ Number of transfer hooks to let pass before firing,
+    /// to choose WHERE in the call chain the re-entry happens.
+    function arm(address target_, bytes calldata reentryCalldata_, uint256 skipHooks_) external {
         target = target_;
         reentryCalldata = reentryCalldata_;
+        skipHooks = skipHooks_;
         armed = true;
     }
 
@@ -66,6 +70,10 @@ contract ReentrantERC20 {
 
     function _hook() internal {
         if (armed && !inFlight) {
+            if (skipHooks > 0) {
+                skipHooks--;
+                return;
+            }
             inFlight = true;
             armed = false;
             //slither-disable-next-line low-level-calls
@@ -154,11 +162,17 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         inv.deposit4(address(evil), EVIL_VAULT, _float(10e6), _noTasks());
         vm.stopPrank();
 
-        // Re-enter withdraw4 from inside Raindex's token.transfer to the
-        // inventory, mid-withdraw.
+        // Re-enter withdraw4 from inside the inventory's OWN forward transfer
+        // to the caller (hook #2). Hook #1 (Raindex's transfer to the
+        // inventory) is skipped: that window sits inside Raindex's own
+        // reentrancy guard, which shares the OZ error selector, so it cannot
+        // distinguish the inventory's guard from Raindex's. The forward step
+        // happens AFTER Raindex returns — only the inventory's guard protects
+        // it.
         evil.arm(
             address(inv),
-            abi.encodeCall(RaindexInventory.withdraw4, (address(evil), EVIL_VAULT, _float(1e6), _noTasks()))
+            abi.encodeCall(RaindexInventory.withdraw4, (address(evil), EVIL_VAULT, _float(1e6), _noTasks())),
+            1
         );
         uint256 opBefore = evil.balanceOf(operator);
         vm.prank(operator);
@@ -180,10 +194,13 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         evil.mint(address(evil), 1e6); // funds for the re-entrant deposit attempt
         evil.mint(operator, 10e6);
 
-        // Re-enter deposit4 from inside the inventory's safeTransferFrom pull.
+        // Re-enter deposit4 from inside the inventory's safeTransferFrom pull
+        // (hook #1) — this window precedes any Raindex involvement, so the
+        // inventory's own guard is what must trip.
         evil.arm(
             address(inv),
-            abi.encodeCall(RaindexInventory.deposit4, (address(evil), EVIL_VAULT, _float(1e6), _noTasks()))
+            abi.encodeCall(RaindexInventory.deposit4, (address(evil), EVIL_VAULT, _float(1e6), _noTasks())),
+            0
         );
         vm.startPrank(operator);
         evil.approve(address(inv), 10e6);
