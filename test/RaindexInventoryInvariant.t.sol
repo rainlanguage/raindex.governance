@@ -152,7 +152,8 @@ contract InventoryHandler is Test {
 
     function actorBalances() external view returns (uint256 total) {
         total = IERC20(USDC_).balanceOf(operators[0]) + IERC20(USDC_).balanceOf(operators[1])
-            + IERC20(USDC_).balanceOf(ADMIN) + IERC20(USDC_).balanceOf(STRANGER) + IERC20(USDC_).balanceOf(address(this));
+            + IERC20(USDC_).balanceOf(ADMIN) + IERC20(USDC_).balanceOf(STRANGER)
+            + IERC20(USDC_).balanceOf(address(this));
     }
 }
 
@@ -169,9 +170,7 @@ contract RaindexInventoryInvariantTest is RaindexInventoryTestBase {
         address operator2 = makeAddr("operator2");
         vm.prank(admin);
         inv.grantRole(OPERATOR_ROLE, operator2);
-        handler = new InventoryHandler(
-            inv, RAINDEX, USDC, VAULT, admin, operator, operator2, makeAddr("stranger")
-        );
+        handler = new InventoryHandler(inv, RAINDEX, USDC, VAULT, admin, operator, operator2, makeAddr("stranger"));
         targetContract(address(handler));
     }
 
@@ -184,11 +183,7 @@ contract RaindexInventoryInvariantTest is RaindexInventoryTestBase {
     /// @dev Conservation: the vault always equals net settled deposits minus
     /// withdrawals — no draw ever creates or destroys value.
     function invariant_vaultEqualsNetDeposits() external view {
-        assertEq(
-            _vaultRaw(USDC, VAULT),
-            handler.gDeposited() - handler.gWithdrawn(),
-            "vault != net deposits"
-        );
+        assertEq(_vaultRaw(USDC, VAULT), handler.gDeposited() - handler.gWithdrawn(), "vault != net deposits");
     }
 
     /// @dev Closed system: everything the handler ever minted is accounted for

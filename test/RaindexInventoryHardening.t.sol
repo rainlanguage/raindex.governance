@@ -256,7 +256,9 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         QuoteV2 memory quoteConfig;
         bytes memory expected = abi.encodeCall(IRaindexV6.quote2, (quoteConfig));
         vm.mockCall(
-            address(RAINDEX), expected, abi.encode(true, Float.wrap(bytes32(uint256(7))), Float.wrap(bytes32(uint256(9))))
+            address(RAINDEX),
+            expected,
+            abi.encode(true, Float.wrap(bytes32(uint256(7))), Float.wrap(bytes32(uint256(9))))
         );
         (bool exists, Float outputMax, Float ioRatio) = inv.quote2(quoteConfig);
         assertTrue(exists);
@@ -272,9 +274,8 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
     /// mocked), it only has to survive the abi.encode round-trip byte-exactly.
     function _dummyTasks() internal pure returns (TaskV2[] memory tasks) {
         tasks = new TaskV2[](1);
-        tasks[0].evaluable = EvaluableV4(
-            IInterpreterV4(address(0xdeadbeef)), IInterpreterStoreV3(address(0xcafe)), hex"c0de"
-        );
+        tasks[0].evaluable =
+            EvaluableV4(IInterpreterV4(address(0xdeadbeef)), IInterpreterStoreV3(address(0xcafe)), hex"c0de");
     }
 
     function test_withdraw4_forwardsTasksToRaindex() external {
