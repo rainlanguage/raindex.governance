@@ -14,6 +14,7 @@ path = [
   "REUSE.toml",
   "README.md",
   "PLAN.md",
+  "audit/mutation-test-scans.json",
 ]
 SPDX-FileCopyrightText = "Copyright (c) 2020 Rain Open Source Software Ltd"
 SPDX-License-Identifier = "LicenseRef-DCL-1.0"
