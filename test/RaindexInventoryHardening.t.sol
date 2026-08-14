@@ -279,14 +279,21 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
     }
 
     function test_withdraw4_forwardsTasksToRaindex() external {
-        TaskV2[] memory tasks = _dummyTasks();
-        Float zero = _float(0);
-        bytes memory expected = abi.encodeCall(IRaindexV6.withdraw4, (USDC, VAULT, zero, tasks));
-        vm.mockCall(address(RAINDEX), expected, "");
+        // Driven against the LIVE Raindex: a mock can't deliver tokens (so the
+        // balance-delta check would revert), and a sub-unit amount now no-ops.
+        // The single task carries empty bytecode — Raindex skips it at runtime,
+        // so the withdraw settles — while the non-empty tasks ARRAY still
+        // distinguishes verbatim forwarding from the empty-array mutant.
+        // `_float(1e6)` is exact at 6dp, so the floored target handed to Raindex
+        // is byte-identical to what the caller passed.
+        _depositAs(admin, VAULT, 2e6);
+        TaskV2[] memory tasks = new TaskV2[](1);
+        tasks[0].evaluable = EvaluableV4(IInterpreterV4(address(0)), IInterpreterStoreV3(address(0)), hex"");
+
+        bytes memory expected = abi.encodeCall(IRaindexV6.withdraw4, (USDC, VAULT, _float(1e6), tasks));
         vm.expectCall(address(RAINDEX), expected);
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, zero, tasks);
-        vm.clearMockedCalls();
+        inv.withdraw4(USDC, VAULT, _float(1e6), tasks);
     }
 
     function test_deposit4_forwardsTasksToRaindex() external {
@@ -315,6 +322,32 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         assertEq(IERC20(USDC).balanceOf(address(inv)), 42e6, "stray balance NOT swept to the caller");
     }
 
+    // ---- withdraw4 floors the target to token precision so Raindex debits the
+    // vault by exactly what leaves it — no sub-unit dust burned (finding #4) ----
+
+    function test_withdraw_subPrecisionTarget_burnsNoVaultDust() external {
+        _depositAs(admin, VAULT, 10e6);
+        (uint256 vaultBefore18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
+
+        // 1.0000005 USDC is lossy at USDC's 6dp. Pre-fix, `withdraw4` handed
+        // Raindex the raw Float: Raindex debited the vault by the full
+        // 1.0000005 but could only transfer 1.000000 raw, silently burning the
+        // 5e-7 remainder from the shared pool (the floored `requested` never
+        // trips InsufficientVaultLiquidity). The fix floors the target first,
+        // so the vault is debited by exactly 1.000000.
+        Float f = LibDecimalFloat.packLossless(10_000_005, -7);
+        uint256 opBefore = IERC20(USDC).balanceOf(operator);
+        vm.prank(operator);
+        inv.withdraw4(USDC, VAULT, f, _noTasks());
+
+        (uint256 vaultAfter18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
+        assertEq(IERC20(USDC).balanceOf(operator) - opBefore, 1_000_000, "caller receives the floored amount");
+        // Exactly 1.000000 USDC leaves the vault (1e6 raw == 1e18 at 18dp), not
+        // 1.0000005. Pre-fix this delta was 1_000_000_500_000_000_000.
+        assertEq(vaultBefore18 - vaultAfter18, uint256(1_000_000) * 1e12, "vault debited exactly, no dust burned");
+        assertEq(IERC20(USDC).balanceOf(address(inv)), 0, "nothing stranded on the inventory");
+    }
+
     // ---- events (mutants W8, D10 survived: zero event assertions existed) ----
 
     function test_withdraw_emitsOperatorWithdraw() external {
@@ -335,11 +368,14 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.stopPrank();
     }
 
-    // ---- zero-received withdraw is a silent no-op (mutant W9 survived) ----
+    // ---- a sub-unit target is a clean no-op: `requested == 0` returns early,
+    // so nothing moves, no event fires, and the vault is NOT touched (finding
+    // #4: the pre-fix path debited the vault float and burned the remainder) ----
 
-    function test_withdraw_zeroReceived_noTransferNoEvent() external {
-        // Empty vault: Raindex withdraws min(target, 0) = 0. requested also
-        // floors to 0, so the call succeeds as a no-op: no transfer, no event.
+    function test_withdraw_subUnitTarget_noOp_noVaultTouch() external {
+        _depositAs(admin, VAULT, 5e6); // fund the vault so a burn would be visible
+        (uint256 vaultBefore18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
+
         Float subUnit = LibDecimalFloat.packLossless(5, -7); // 5e-7 USDC < 1 raw unit
         uint256 opBefore = IERC20(USDC).balanceOf(operator);
 
@@ -348,9 +384,11 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         inv.withdraw4(USDC, VAULT, subUnit, _noTasks());
 
         assertEq(IERC20(USDC).balanceOf(operator), opBefore, "no funds moved");
+        (uint256 vaultAfter18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
+        assertEq(vaultAfter18, vaultBefore18, "vault untouched: no sub-unit dust burned");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
-            assertTrue(logs[i].topics[0] != OperatorWithdraw.selector, "no OperatorWithdraw event on zero-receive");
+            assertTrue(logs[i].topics[0] != OperatorWithdraw.selector, "no OperatorWithdraw event on a no-op");
         }
     }
 }

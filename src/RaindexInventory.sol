@@ -126,7 +126,10 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// caller settling atomically never receives a short fill.
     /// @dev Drop-in `IRaindexV6.withdraw4` signature. The amount actually
     /// withdrawn is measured by balance delta (Raindex withdraws `min(target,
-    /// vault balance)`), then forwarded to `msg.sender`.
+    /// vault balance)`), then forwarded to `msg.sender`. `targetAmount` is
+    /// floored to the token's decimals before being handed to Raindex, so the
+    /// vault is debited by exactly what leaves it; a target below one raw unit
+    /// is a no-op.
     /// @param token The token to withdraw.
     /// @param vaultId The Raindex vault to draw on.
     /// @param targetAmount The amount to withdraw as a Raindex decimal Float.
@@ -141,15 +144,35 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         whenNotPaused
         nonReentrant
     {
-        uint256 requested = _fromFloat(targetAmount, token);
+        // Floor the target to the token's precision and hand Raindex THAT
+        // float, not the caller's raw `targetAmount`. Raindex debits the vault
+        // by the float it is given but can only transfer whole raw units, so a
+        // sub-precision `targetAmount` would have it debit more than it moves —
+        // the remainder burned from the shared pool with no revert (the floored
+        // `requested` never trips the liquidity check). Passing the floored
+        // float keeps Raindex's debit equal to what actually leaves the vault.
+        uint8 decimals = IERC20Metadata(token).decimals();
+        // Floor to token precision: the discarded `exact` bool is deliberate.
+        //slither-disable-next-line unused-return
+        (uint256 requested,) = targetAmount.toFixedDecimalLossy(decimals);
+
+        // A target below one raw unit floors to zero: nothing can be withdrawn.
+        // Return without touching Raindex — a zero-float withdraw would either
+        // revert or, worse, burn the sub-unit remainder from the vault. Nothing
+        // moves, nothing is lost.
+        if (requested == 0) return;
+
+        // Re-pack the floored raw amount; exact for any real balance.
+        //slither-disable-next-line unused-return
+        (Float flooredTarget,) = LibDecimalFloat.fromFixedDecimalLossyPacked(requested, decimals);
         uint256 balBefore = IERC20(token).balanceOf(address(this));
-        RAINDEX.withdraw4(token, vaultId, targetAmount, tasks);
+        RAINDEX.withdraw4(token, vaultId, flooredTarget, tasks);
         uint256 received = IERC20(token).balanceOf(address(this)) - balBefore;
+        // `requested >= 1` here, so a short vault always trips this and a
+        // covered draw always yields `received >= requested >= 1`.
         if (received < requested) revert InsufficientVaultLiquidity(token, requested, received);
-        if (received > 0) {
-            SafeERC20.safeTransfer(IERC20(token), msg.sender, received);
-            emit OperatorWithdraw(msg.sender, token, vaultId, received);
-        }
+        SafeERC20.safeTransfer(IERC20(token), msg.sender, received);
+        emit OperatorWithdraw(msg.sender, token, vaultId, received);
     }
 
     /// @notice Pull `depositAmount` of `token` from the caller and deposit it
@@ -287,12 +310,5 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         if (IERC20(token).allowance(address(this), address(RAINDEX)) < amount) {
             SafeERC20.forceApprove(IERC20(token), address(RAINDEX), type(uint256).max);
         }
-    }
-
-    function _fromFloat(Float f, address token) internal view returns (uint256) {
-        // Withdraw path floors: the discarded `exact` bool is deliberate.
-        //slither-disable-next-line unused-return
-        (uint256 amount,) = f.toFixedDecimalLossy(IERC20Metadata(token).decimals());
-        return amount;
     }
 }
