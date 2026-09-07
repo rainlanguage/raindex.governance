@@ -13,6 +13,8 @@ import {IRaindexV6} from "raindex-interface-0.1.2/src/interface/IRaindexV6.sol";
 // addresses — every value is supplied at dispatch time.
 bytes32 constant SUITE_BASE = keccak256("base");
 bytes32 constant SUITE_BASE_SEPOLIA = keccak256("base-sepolia");
+bytes32 constant SUITE_ETHEREUM = keccak256("ethereum");
+bytes32 constant SUITE_HYPEREVM = keccak256("hyperevm");
 
 /// @title Deploy
 /// @notice Manual (`workflow_dispatch`) deploy of a fresh `RaindexInventory`.
@@ -36,6 +38,10 @@ contract Deploy is Script {
             rpcEndpoint = "base";
         } else if (suite == SUITE_BASE_SEPOLIA) {
             rpcEndpoint = "base_sepolia";
+        } else if (suite == SUITE_ETHEREUM) {
+            rpcEndpoint = "ethereum";
+        } else if (suite == SUITE_HYPEREVM) {
+            rpcEndpoint = "hyperevm";
         } else {
             revert("Unknown deployment suite");
         }
