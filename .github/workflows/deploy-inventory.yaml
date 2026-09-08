@@ -15,6 +15,8 @@ on:
         options:
           - base
           - base-sepolia
+          - ethereum
+          - hyperevm
       admin:
         description: "DEFAULT_ADMIN_ROLE holder — the inventory owner"
         required: true
@@ -23,8 +25,15 @@ on:
         description: "Raindex OrderBook (IRaindexV6) address"
         required: true
         type: string
+      legacy:
+        description: >-
+          Send type-0 (legacy) transactions. Automatically enabled for HyperEVM; this input can also enable them on another network.
+        required: false
+        default: false
+        type: boolean
       verify:
-        description: "Verify on the block explorer"
+        description: >-
+          Verify on the block explorer through Etherscan V2. HyperEVM mainnet is supported as chain 999.
         required: false
         default: true
         type: boolean
@@ -32,6 +41,9 @@ permissions:
   contents: read
 jobs:
   deploy:
+    concurrency:
+      group: deploy-inventory-${{ inputs.network }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: rainlanguage/rainix/.github/actions/nix-cachix-setup@main
@@ -41,7 +53,7 @@ jobs:
         if: hashFiles('soldeer.lock') != ''
         run: nix develop -c forge soldeer install
       - name: Deploy RaindexInventory
-        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ inputs.verify && '--verify' || '' }}
+        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ (inputs.legacy || inputs.network == 'hyperevm') && '--legacy' || '' }} ${{ inputs.verify && '--verify' || '' }}
         env:
           DEPLOYMENT_SUITE: ${{ inputs.network }}
           DEPLOYMENT_KEY: ${{ secrets.PRIVATE_KEY }}
@@ -49,5 +61,9 @@ jobs:
           INVENTORY_RAINDEX: ${{ inputs.raindex }}
           BASE_RPC_URL: ${{ secrets.RPC_URL_BASE_FORK || vars.RPC_URL_BASE_FORK || '' }}
           BASE_SEPOLIA_RPC_URL: ${{ secrets.RPC_URL_BASE_SEPOLIA_FORK || vars.RPC_URL_BASE_SEPOLIA_FORK || '' }}
+          ETHEREUM_RPC_URL: ${{ secrets.RPC_URL_ETHEREUM_FORK || vars.RPC_URL_ETHEREUM_FORK || '' }}
+          HYPEREVM_RPC_URL: ${{ secrets.RPC_URL_HYPEREVM_FORK || vars.RPC_URL_HYPEREVM_FORK || '' }}
           CI_DEPLOY_BASE_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || '' }}
+          CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || '' }}
+          CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || '' }}
