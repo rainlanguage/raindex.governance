@@ -41,6 +41,9 @@ permissions:
   contents: read
 jobs:
   deploy:
+    concurrency:
+      group: deploy-inventory-${{ inputs.network }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: rainlanguage/rainix/.github/actions/nix-cachix-setup@main
