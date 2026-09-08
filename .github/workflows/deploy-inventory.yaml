@@ -27,13 +27,13 @@ on:
         type: string
       legacy:
         description: >-
-          Send type-0 (legacy) transactions. Required for HyperEVM, whose RPC rejects the fee-history ranges EIP-1559 estimation asks for. Type-0 works everywhere, so it is safe to leave on for any network.
+          Send type-0 (legacy) transactions. Automatically enabled for HyperEVM; this input can also enable them on another network.
         required: false
         default: false
         type: boolean
       verify:
         description: >-
-          Verify on the block explorer. HyperEVM has no Etherscan-compatible verifier wired here yet, so leave it off for that network and verify out of band.
+          Verify on the block explorer through Etherscan V2. HyperEVM mainnet is supported as chain 999.
         required: false
         default: true
         type: boolean
@@ -50,7 +50,7 @@ jobs:
         if: hashFiles('soldeer.lock') != ''
         run: nix develop -c forge soldeer install
       - name: Deploy RaindexInventory
-        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ inputs.legacy && '--legacy' || '' }} ${{ inputs.verify && '--verify' || '' }}
+        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ (inputs.legacy || inputs.network == 'hyperevm') && '--legacy' || '' }} ${{ inputs.verify && '--verify' || '' }}
         env:
           DEPLOYMENT_SUITE: ${{ inputs.network }}
           DEPLOYMENT_KEY: ${{ secrets.PRIVATE_KEY }}

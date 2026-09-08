@@ -34,14 +34,19 @@ contract Deploy is Script {
         bytes32 suite = keccak256(bytes(vm.envString("DEPLOYMENT_SUITE")));
 
         string memory rpcEndpoint;
+        uint256 expectedChainId;
         if (suite == SUITE_BASE) {
             rpcEndpoint = "base";
+            expectedChainId = 8453;
         } else if (suite == SUITE_BASE_SEPOLIA) {
             rpcEndpoint = "base_sepolia";
+            expectedChainId = 84532;
         } else if (suite == SUITE_ETHEREUM) {
             rpcEndpoint = "ethereum";
+            expectedChainId = 1;
         } else if (suite == SUITE_HYPEREVM) {
             rpcEndpoint = "hyperevm";
+            expectedChainId = 999;
         } else {
             revert("Unknown deployment suite");
         }
@@ -53,6 +58,8 @@ contract Deploy is Script {
         require(admin != address(0) && raindex != address(0), "zero admin/raindex");
 
         vm.createSelectFork(vm.rpcUrl(rpcEndpoint));
+        require(block.chainid == expectedChainId, "RPC chain ID does not match deployment suite");
+        require(raindex.code.length > 0, "raindex has no code");
 
         vm.startBroadcast(deployerKey);
         RaindexInventory inventory = new RaindexInventory(admin, IRaindexV6(raindex));
