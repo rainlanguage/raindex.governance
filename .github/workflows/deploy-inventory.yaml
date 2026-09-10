@@ -15,8 +15,10 @@ on:
         options:
           - base
           - base-sepolia
+          - bsc
           - ethereum
           - hyperevm
+          - robinhood
       admin:
         description: "DEFAULT_ADMIN_ROLE holder — the inventory owner"
         required: true
@@ -33,7 +35,7 @@ on:
         type: boolean
       verify:
         description: >-
-          Verify on the block explorer through Etherscan V2. HyperEVM mainnet is supported as chain 999.
+          Verify on the block explorer after broadcasting. Etherscan V2 covers every network here except Robinhood Chain (4663), which Etherscan does not index; that network verifies through Sourcify instead (Blockscout, its explorer, imports Sourcify matches).
         required: false
         default: true
         type: boolean
@@ -53,7 +55,7 @@ jobs:
         if: hashFiles('soldeer.lock') != ''
         run: nix develop -c forge soldeer install
       - name: Deploy RaindexInventory
-        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ (inputs.legacy || inputs.network == 'hyperevm') && '--legacy' || '' }} ${{ inputs.verify && '--verify' || '' }}
+        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ (inputs.legacy || inputs.network == 'hyperevm') && '--legacy' || '' }} ${{ inputs.verify && (inputs.network == 'robinhood' && '--verify --verifier sourcify' || '--verify') || '' }}
         env:
           DEPLOYMENT_SUITE: ${{ inputs.network }}
           DEPLOYMENT_KEY: ${{ secrets.PRIVATE_KEY }}
@@ -61,9 +63,12 @@ jobs:
           INVENTORY_RAINDEX: ${{ inputs.raindex }}
           BASE_RPC_URL: ${{ secrets.RPC_URL_BASE_FORK || vars.RPC_URL_BASE_FORK || '' }}
           BASE_SEPOLIA_RPC_URL: ${{ secrets.RPC_URL_BASE_SEPOLIA_FORK || vars.RPC_URL_BASE_SEPOLIA_FORK || '' }}
+          BSC_RPC_URL: ${{ secrets.RPC_URL_BSC_FORK || vars.RPC_URL_BSC_FORK || '' }}
           ETHEREUM_RPC_URL: ${{ secrets.RPC_URL_ETHEREUM_FORK || vars.RPC_URL_ETHEREUM_FORK || '' }}
           HYPEREVM_RPC_URL: ${{ secrets.RPC_URL_HYPEREVM_FORK || vars.RPC_URL_HYPEREVM_FORK || '' }}
+          ROBINHOOD_RPC_URL: ${{ secrets.RPC_URL_ROBINHOOD_FORK || vars.RPC_URL_ROBINHOOD_FORK || '' }}
           CI_DEPLOY_BASE_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || '' }}
+          CI_DEPLOY_BSC_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BSC_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BSC_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || '' }}
