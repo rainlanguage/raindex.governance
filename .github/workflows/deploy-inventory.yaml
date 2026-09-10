@@ -15,6 +15,7 @@ on:
         options:
           - base
           - base-sepolia
+          - bsc
           - ethereum
           - hyperevm
           - robinhood
@@ -62,10 +63,12 @@ jobs:
           INVENTORY_RAINDEX: ${{ inputs.raindex }}
           BASE_RPC_URL: ${{ secrets.RPC_URL_BASE_FORK || vars.RPC_URL_BASE_FORK || '' }}
           BASE_SEPOLIA_RPC_URL: ${{ secrets.RPC_URL_BASE_SEPOLIA_FORK || vars.RPC_URL_BASE_SEPOLIA_FORK || '' }}
+          BSC_RPC_URL: ${{ secrets.RPC_URL_BSC_FORK || vars.RPC_URL_BSC_FORK || '' }}
           ETHEREUM_RPC_URL: ${{ secrets.RPC_URL_ETHEREUM_FORK || vars.RPC_URL_ETHEREUM_FORK || '' }}
           HYPEREVM_RPC_URL: ${{ secrets.RPC_URL_HYPEREVM_FORK || vars.RPC_URL_HYPEREVM_FORK || '' }}
           ROBINHOOD_RPC_URL: ${{ secrets.RPC_URL_ROBINHOOD_FORK || vars.RPC_URL_ROBINHOOD_FORK || '' }}
           CI_DEPLOY_BASE_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || '' }}
+          CI_DEPLOY_BSC_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BSC_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BSC_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || '' }}

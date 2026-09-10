@@ -13,6 +13,7 @@ import {IRaindexV6} from "raindex-interface-0.1.2/src/interface/IRaindexV6.sol";
 // addresses — every value is supplied at dispatch time.
 bytes32 constant SUITE_BASE = keccak256("base");
 bytes32 constant SUITE_BASE_SEPOLIA = keccak256("base-sepolia");
+bytes32 constant SUITE_BSC = keccak256("bsc");
 bytes32 constant SUITE_ETHEREUM = keccak256("ethereum");
 bytes32 constant SUITE_HYPEREVM = keccak256("hyperevm");
 bytes32 constant SUITE_ROBINHOOD = keccak256("robinhood");
@@ -42,6 +43,9 @@ contract Deploy is Script {
         } else if (suite == SUITE_BASE_SEPOLIA) {
             rpcEndpoint = "base_sepolia";
             expectedChainId = 84532;
+        } else if (suite == SUITE_BSC) {
+            rpcEndpoint = "bsc";
+            expectedChainId = 56;
         } else if (suite == SUITE_ETHEREUM) {
             rpcEndpoint = "ethereum";
             expectedChainId = 1;
