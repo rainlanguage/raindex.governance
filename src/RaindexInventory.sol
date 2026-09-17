@@ -50,9 +50,13 @@ import {LibDecimalFloat, Float} from "rain-math-float-0.1.1/src/lib/LibDecimalFl
 ///
 /// The trust boundary is `OPERATOR_ROLE`: an operator can withdraw a vault's
 /// balance to itself, so the role is only ever granted to audited contracts and
-/// stays admin-grantable/revocable. [`pause`] is the kill switch — it fails all
-/// operator (and admin) fund movement closed while leaving order management
-/// available, so the admin can cancel orders during an incident.
+/// stays admin-grantable/revocable. [`pause`] is the kill switch — it fails
+/// [`deposit4`] / [`withdraw4`] closed (for operators and the admin alike)
+/// while leaving order management available, so the admin can cancel orders
+/// during an incident. [`rescue`] is deliberately *not* pause-gated: it only
+/// moves stray, non-vault balances and must stay available for incident
+/// recovery. The contract holds no vault capital at rest — that lives in
+/// Raindex — so pausing the two vault-movement paths freezes the pool.
 contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall {
     using LibDecimalFloat for Float;
 
