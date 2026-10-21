@@ -21,11 +21,11 @@ runs = 5096
 recursive_deps = false
 
 [dependencies]
-forge-std = "1.16.1"
-rain-interpreter-interface = "0.1.0"
-rain-math-float = "0.1.1"
-raindex-interface = "0.1.2"
-"@openzeppelin-contracts" = "5.1.0"
+forge-std = "1.17.0"
+rainlang-interface = "0.2.13"
+rain-math-float = "0.3.10"
+raindex-interface = "0.1.8"
+"@openzeppelin-contracts" = "5.7.0"
 
 [rpc_endpoints]
 base = "${BASE_RPC_URL}"
