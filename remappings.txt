@@ -3,6 +3,6 @@
 forge-std-1.17.0/=dependencies/forge-std-1.17.0/
 forge-std/=dependencies/forge-std-1.17.0/src/
 openzeppelin-contracts/=dependencies/@openzeppelin-contracts-5.7.0/
-rain-math-float-0.3.10/=dependencies/rain-math-float-0.3.10/
-raindex-interface-0.1.11/=dependencies/raindex-interface-0.1.11/
+rain-math-float-0.3.11/=dependencies/rain-math-float-0.3.11/
+raindex-interface-0.1.12/=dependencies/raindex-interface-0.1.12/
 rainlang-0.2.27/=dependencies/rainlang-0.2.27/
