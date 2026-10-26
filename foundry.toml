@@ -22,9 +22,9 @@ recursive_deps = false
 
 [dependencies]
 forge-std = "1.17.0"
-rainlang-interface = "0.2.13"
+rainlang = "0.2.27"
 rain-math-float = "0.3.10"
-raindex-interface = "0.1.8"
+raindex-interface = { version = "0.1.11", git = "https://github.com/rainlanguage/raindex.interface.git", rev = "92948ce2c278d1150fb47174650c51609340ca2f" }
 "@openzeppelin-contracts" = "5.7.0"
 
 [rpc_endpoints]
