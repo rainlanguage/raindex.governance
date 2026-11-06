@@ -100,6 +100,17 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// measured balance delta).
     error InsufficientVaultLiquidity(address token, uint256 requested, uint256 received);
 
+    /// @notice A [`withdraw4`] target floors to zero raw units at the token's
+    /// decimals, so there is nothing to withdraw.
+    /// @param token The token requested.
+    /// @param vaultId The Raindex vault named.
+    error ZeroWithdrawAmount(address token, bytes32 vaultId);
+
+    /// @notice A caller without `DEFAULT_ADMIN_ROLE` passed non-empty `tasks`.
+    /// Raindex runs tasks in this contract's state namespace, which is the
+    /// namespace of every order it owns, so only the admin may send them.
+    error OperatorTasksForbidden();
+
     /// @dev Passes for `DEFAULT_ADMIN_ROLE` or `OPERATOR_ROLE`. Admins can move
     /// funds for management; operators for whatever they settle against.
     modifier onlyAdminOrOperator() {
@@ -111,6 +122,10 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(OPERATOR_ROLE, msg.sender)) {
             revert IAccessControl.AccessControlUnauthorizedAccount(msg.sender, OPERATOR_ROLE);
         }
+    }
+
+    function _onlyAdminTasks(TaskV2[] calldata tasks) internal view {
+        if (tasks.length != 0 && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();
     }
 
     /// @param admin_ Granted `DEFAULT_ADMIN_ROLE`: owns order management, role
@@ -127,8 +142,8 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     // Inventory movement (admin or operator; funds to / from msg.sender)
     // ---------------------------------------------------------------------
 
-    /// @notice Withdraw up to `targetAmount` of `token` from `vaultId` and
-    /// forward everything received to the caller. Reverts if the vault could not
+    /// @notice Withdraw `targetAmount` of `token`, floored to the token's
+    /// decimals, from `vaultId` and forward everything received to the caller. Reverts if the vault could not
     /// cover the request (e.g. a concurrent Raindex clear drained it first), so a
     /// caller settling atomically never receives a short fill.
     /// @dev Drop-in `IRaindexV6.withdraw4` signature. The amount actually
@@ -136,11 +151,13 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// vault balance)`), then forwarded to `msg.sender`. `targetAmount` is
     /// floored to the token's decimals before being handed to Raindex, so the
     /// vault is debited by exactly what leaves it; a target below one raw unit
-    /// is a no-op.
+    /// reverts `ZeroWithdrawAmount`.
     /// @param token The token to withdraw.
     /// @param vaultId The Raindex vault to draw on.
     /// @param targetAmount The amount to withdraw as a Raindex decimal Float.
     /// @param tasks Forwarded verbatim to Raindex to run after the withdraw.
+    /// Admin only: a non-empty array from an operator reverts
+    /// `OperatorTasksForbidden`.
     // The balance-delta reads around `RAINDEX.withdraw4` are how we measure the
     // actually-withdrawn amount; the function is `nonReentrant` so the external
     // call cannot re-enter.
@@ -151,6 +168,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         whenNotPaused
         nonReentrant
     {
+        _onlyAdminTasks(tasks);
         // Floor the target to the token's precision and hand Raindex THAT
         // float, not the caller's raw `targetAmount`. Raindex debits the vault
         // by the float it is given but can only transfer whole raw units, so a
@@ -164,10 +182,9 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         (uint256 requested,) = targetAmount.toFixedDecimalLossy(decimals);
 
         // A target below one raw unit floors to zero: nothing can be withdrawn.
-        // Return without touching Raindex — a zero-float withdraw would either
-        // revert or, worse, burn the sub-unit remainder from the vault. Nothing
-        // moves, nothing is lost.
-        if (requested == 0) return;
+        // Revert like Raindex does for a zero target, rather than hand Raindex
+        // the sub-unit Float (which would burn the remainder).
+        if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);
 
         // Re-pack the floored raw amount; exact for any real balance.
         //slither-disable-next-line unused-return
@@ -184,30 +201,35 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
 
     /// @notice Pull `depositAmount` of `token` from the caller and deposit it
     /// into `vaultId`. The caller must have approved this contract for `token`.
-    /// @dev Drop-in `IRaindexV6.deposit4` signature. Raindex's `pullTokens`
-    /// converts the `Float` to raw units and **rounds a lossy truncation UP**
-    /// (it pulls `toFixedDecimal(depositAmount)` and adds 1 when the conversion
-    /// wasn't exact). We must pull that same rounded-UP amount from the caller,
-    /// otherwise for a sub-precision Float the extra unit Raindex takes from us
-    /// would come out of this contract's own balance (the shared pool) — or the
-    /// deposit would revert. So we round up here to match, byte-for-byte, what
-    /// Raindex will pull from us.
+    /// @dev Drop-in `IRaindexV6.deposit4` signature. A sub-precision
+    /// `depositAmount` is rounded UP to the token's decimals: the caller pays
+    /// that ceiling, and Raindex is handed the ceiling as an exact Float, so
+    /// the vault is credited exactly what the caller paid and Raindex pulls
+    /// exactly that amount whatever its own rounding rule is.
     /// @param token The token to deposit. The caller must have approved this
     /// contract for the (rounded-up) raw amount.
     /// @param vaultId The Raindex vault to credit.
     /// @param depositAmount The amount to deposit as a Raindex decimal Float.
     /// @param tasks Forwarded verbatim to Raindex to run after the deposit.
+    /// Admin only: a non-empty array from an operator reverts
+    /// `OperatorTasksForbidden`.
     function deposit4(address token, bytes32 vaultId, Float depositAmount, TaskV2[] calldata tasks)
         external
         onlyAdminOrOperator
         whenNotPaused
         nonReentrant
     {
-        (uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(IERC20Metadata(token).decimals());
-        if (!exact) amount += 1; // mirror Raindex pullTokens' round-up
+        _onlyAdminTasks(tasks);
+        uint8 decimals = IERC20Metadata(token).decimals();
+        (uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(decimals);
+        if (!exact) amount += 1; // charge the ceiling, never less than asked
+        // Exact for any real balance, so Raindex credits and pulls `amount`.
+        //slither-disable-next-line unused-return
+        (Float charged,) = LibDecimalFloat.fromFixedDecimalLossyPacked(amount, decimals);
         SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);
-        _ensureRaindexApproval(token, amount);
-        RAINDEX.deposit4(token, vaultId, depositAmount, tasks);
+        // Exact allowance: Raindex can never pull stray balances from here.
+        SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);
+        RAINDEX.deposit4(token, vaultId, charged, tasks);
         emit OperatorDeposit(msg.sender, token, vaultId, amount);
     }
 
@@ -311,15 +333,5 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @param amount The raw amount to sweep to the caller.
     function rescue(address token, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         SafeERC20.safeTransfer(IERC20(token), msg.sender, amount);
-    }
-
-    // ---------------------------------------------------------------------
-    // Internal helpers
-    // ---------------------------------------------------------------------
-
-    function _ensureRaindexApproval(address token, uint256 amount) internal {
-        if (IERC20(token).allowance(address(this), address(RAINDEX)) < amount) {
-            SafeERC20.forceApprove(IERC20(token), address(RAINDEX), type(uint256).max);
-        }
     }
 }
