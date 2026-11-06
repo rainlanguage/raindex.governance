@@ -12,13 +12,10 @@
       "probes": 35,
       "killedByExistingSuite": 23,
       "survivorsClosedByNewTests": 27,
-      "note": "As reported by the 0.30.0 campaign. The counts do not add up (23 + 27 > 35): a second round added probes that the total does not count, and the per-mutant ledger was not kept, so they cannot be re-derived. Superseded by the 0.34.0 entry, which commits its per-mutant ledger.",
+      "note": "As reported by the 0.30.0 campaign. The counts do not add up (23 + 27 > 35): a second round added probes that the total does not count, and the per-mutant ledger was not kept, so they cannot be re-derived. To be superseded by the 0.34.0 entry for RAI-1707, which commits its per-mutant ledger.",
       "candidates": 2,
       "confirmed": 2,
-      "filed": [
-        "#4",
-        "#5"
-      ]
+      "filed": ["#4", "#5"]
     }
   }
 ]
