@@ -8,9 +8,9 @@
   "scannedSourceBlob": "4f928c72bad0965cf148f841e6aa025da965912c",
   "scannedSourceNote": "Probed at stack commit e010080fd4ecdb873f4ec677765e676b5aca7390, which later restacks rewrote, so it is not on this history. The src blob probed is scannedSourceBlob. Since then src changed only in NatSpec (OperatorDeposit and rescue notices), and the tests changed by one addition, test_withdraw_oneRawUnit_settles (66 test entry points now, 65 at the probe). Every verdict holds for the code in this PR.",
   "suite": {
-    "command": "sh .mutation-test/check.sh  (runs: forge test)",
+    "command": "anvil --fork-url <Base RPC> --fork-block-number 53954340 --port 8547, then: nix run github:rainlanguage/adversarial-mutation-test#mutation-probe -- audit/mutation-probe/mutants.toml",
     "env": {
-      "BASE_RPC_URL": "http://127.0.0.1:8547 (anvil --fork-url <Base RPC> --fork-block-number 53954340)",
+      "BASE_RPC_URL": "http://127.0.0.1:8547 (the anvil fork above)",
       "FOUNDRY_FUZZ_SEED": "0x5eed",
       "FOUNDRY_FUZZ_RUNS": "256",
       "FOUNDRY_INVARIANT_RUNS": "16",
@@ -18,7 +18,8 @@
       "FOUNDRY_INVARIANT_SHRINK_RUN_LIMIT": "0"
     },
     "precedence": "Inline forge-config in a test file wins over env: RaindexInventoryInvariant.t.sol pins 16 runs x 64 depth, so the invariant suite ran at its inline values. Fuzz runs came from the env (256, not foundry.toml's 5096).",
-    "rpcFailurePolicy": "any RPC error in the output scores the run as no-run, never as a kill"
+    "rpcFailurePolicy": "any RPC error in the output scores the run as no-run, never as a kill",
+    "wrapper": "audit/mutation-probe/check.sh sets the env below, runs forge test, and prints no pass/fail tally (so the probe scores no-run) when the output contains an RPC error: error sending request, operation timed out, Too Many Requests, or failed to get account."
   },
   "baseline": {
     "passed": 65,
