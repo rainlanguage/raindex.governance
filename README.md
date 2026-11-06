@@ -11,10 +11,10 @@ vaults directly. One pool of capital, many consumers.
 
 It separates two concerns behind two roles:
 
-| Concern                        | Role                 | What it can do                                                         |
-| ------------------------------ | -------------------- | ---------------------------------------------------------------------- |
-| **Own & manage orders/vaults** | `DEFAULT_ADMIN_ROLE` | `addOrder4`, `removeOrder3`, `entask2`, role grants, `pause`, `rescue` |
-| **Move inventory**             | `OPERATOR_ROLE`      | `deposit4`, `withdraw4` against the owned vaults                       |
+| Concern                        | Role                 | What it can do                                                                                                  |
+| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Own & manage orders/vaults** | `DEFAULT_ADMIN_ROLE` | `addOrder4`, `removeOrder3`, `entask2`, role grants, `pause`, `rescue`, and `deposit4`/`withdraw4` with `tasks` |
+| **Move inventory**             | `OPERATOR_ROLE`      | `deposit4`, `withdraw4` against the owned vaults, with empty `tasks` only                                       |
 
 Because the contract is the `msg.sender` to Raindex, it is the canonical owner
 of every order and vault placed through it (Raindex forbids delegated order
@@ -45,24 +45,27 @@ are safe — the loser's transaction simply reverts, never a short fill.
   balance to itself, so the role is only ever granted to audited contracts and
   stays admin-grantable/revocable. Point `DEFAULT_ADMIN_ROLE` at a multisig
   (and, if desired, a timelock) for production.
-- **`pause()`** is the kill switch: it fails `deposit4` / `withdraw4` closed
-  while leaving order management open, so the admin can cancel orders during an
-  incident.
-- `nonReentrant` on every fund movement; `deposit4` self-heals the contract's
-  Raindex allowance.
+- **`pause()`** is the kill switch: `deposit4` / `withdraw4` revert for the
+  admin and operators. It does not touch Raindex: live orders owned by the
+  inventory keep clearing against its vaults, so incident response must also
+  `removeOrder3` them. Order management stays open for that, and `rescue` stays
+  available for stray balances.
+- `nonReentrant` on `deposit4` / `withdraw4`; `deposit4` approves Raindex for
+  exactly the amount it deposits, so no standing allowance is left.
 
 ## Build & test
 
 Foundry + [soldeer](https://soldeer.xyz) (solc 0.8.25, EVM Cancun).
 
 ```bash
-soldeer install      # restore dependencies
+forge soldeer install   # restore dependencies
 forge build
 forge test           # fork tests run against the live Raindex on Base
 ```
 
 The tests fork Base mainnet and exercise every path against the real deployed
-Raindex OrderBook — no mocks. Set the `base` RPC endpoint in `foundry.toml`.
+Raindex OrderBook; a few forwarding tests mock single Raindex responses. Export
+`BASE_RPC_URL` for the `base` RPC endpoint.
 
 ## License
 

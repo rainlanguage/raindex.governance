@@ -166,6 +166,28 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
 
         assertEq(IERC20(USDC).balanceOf(operator), 0, "caller charged exactly the rounded-up amount");
         assertEq(IERC20(USDC).balanceOf(address(inv)), 0, "pool never dips, nothing stranded");
+        (uint256 vault18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
+        assertEq(vault18, charged * 1e12, "vault credited exactly the charge");
+        assertEq(IERC20(USDC).allowance(address(inv), address(RAINDEX)), 0, "no allowance left");
+    }
+
+    /// @dev The same deposit rule at 18 decimals: a WETH amount with more
+    /// precision than the token is charged the ceiling, and the vault is
+    /// credited exactly that.
+    function testFuzz_lossyDeposit_weth_creditsCharge(uint256 coefficient) external {
+        coefficient = bound(coefficient, 1, 1e25); // up to 1M WETH at 19dp
+        // forge-lint: disable-next-line(unsafe-typecast)
+        Float f = LibDecimalFloat.packLossless(int256(coefficient), -19);
+        uint256 charged = coefficient / 10 + (coefficient % 10 == 0 ? 0 : 1);
+        deal(WETH, operator, charged);
+        vm.startPrank(operator);
+        IERC20(WETH).approve(address(inv), charged);
+        inv.deposit4(WETH, VAULT, f, _noTasks());
+        vm.stopPrank();
+        assertEq(IERC20(WETH).balanceOf(operator), 0, "caller charged exactly the ceiling");
+        assertEq(IERC20(WETH).balanceOf(address(inv)), 0, "nothing stranded");
+        assertEq(_vaultRaw(WETH, VAULT), charged, "vault credited exactly the charge");
+        assertEq(IERC20(WETH).allowance(address(inv), address(RAINDEX)), 0, "no allowance left");
     }
 
     /// @dev For any lossy target at 6 or 18 decimals, the caller receives the

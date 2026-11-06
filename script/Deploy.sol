@@ -4,7 +4,7 @@ pragma solidity =0.8.25;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {RaindexInventory} from "src/RaindexInventory.sol";
+import {RaindexInventory} from "../src/RaindexInventory.sol";
 import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
 
 // Network selector (DEPLOYMENT_SUITE env): picks which foundry.toml

@@ -298,6 +298,13 @@ contract RaindexInventoryForkTest is Test {
         // Caller was charged the rounded-UP amount (its whole balance), so
         // Raindex's round-up pull is fully funded and the pool is never touched.
         assertEq(IERC20(USDC).balanceOf(operator), 0, "caller charged the rounded-UP raw amount");
-        assertGt(_vaultRaw(USDC, VAULT), 0, "vault credited");
+        // The vault is credited exactly what the caller paid (1.000001), not the
+        // unrounded 1.0000005, so the whole charge is withdrawable again.
+        (uint256 vault18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
+        assertEq(vault18, roundedUp * 1e12, "vault credited exactly the charge");
+        assertEq(IERC20(USDC).allowance(address(inv), address(RAINDEX)), 0, "no allowance left to Raindex");
+        vm.prank(operator);
+        inv.withdraw4(USDC, VAULT, _float(USDC, roundedUp), new TaskV2[](0));
+        assertEq(IERC20(USDC).balanceOf(operator), roundedUp, "full charge recoverable");
     }
 }

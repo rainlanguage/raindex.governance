@@ -60,12 +60,12 @@ reverts and it retries. No partial fills, no over-draw.
   balance to itself, so it is only ever granted to audited contracts and is
   admin-grantable/revocable. Production should point `DEFAULT_ADMIN_ROLE` at a
   multisig, optionally behind a timelock.
-- **`pause()`** fails `deposit4` / `withdraw4` closed while leaving order
-  management open, so the admin can cancel orders during an incident even while
-  inventory movement is frozen.
-- `nonReentrant` guards every fund movement; `deposit4` self-heals the
-  inventory→Raindex allowance. The guard is Multicall-safe because batched calls
-  execute sequentially (each acquires/releases), not nested.
+- **`pause()`** makes `deposit4` / `withdraw4` revert while leaving order
+  management open. Live orders keep clearing on Raindex, so the admin must also
+  cancel them during an incident. `rescue` is not pause-gated.
+- `nonReentrant` guards `deposit4` / `withdraw4`; `deposit4` approves exactly
+  the amount it deposits to Raindex. The guard is Multicall-safe because batched
+  calls execute sequentially (each acquires/releases), not nested.
 
 ## Deploying onto existing positions (migration)
 
@@ -83,6 +83,6 @@ This is a deliberate, supervised migration, not a hot swap.
 
 ## Status
 
-`RaindexInventory` + fork tests (against the live Base Raindex, no mocks) are in
-this repo and green. Consumers live in their own repositories and depend on this
-one; nothing consumer-specific belongs here.
+`RaindexInventory` + fork tests (against the live Base Raindex; a few forwarding
+tests mock single responses) are in this repo and green. Consumers live in their
+own repositories and depend on this one; nothing consumer-specific belongs here.
