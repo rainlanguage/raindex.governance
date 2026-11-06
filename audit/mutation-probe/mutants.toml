@@ -1,0 +1,408 @@
+[suite]
+root = "../.."
+command = ["sh", "audit/mutation-probe/check.sh"]
+proof = '(\d+) tests passed, (\d+) failed'
+fail-pattern = '(?m)^\[FAIL.*\] ((?:test|invariant)\w*)\('
+timeout-secs = 1500
+
+[[mutants]]
+name = "M01 ctor zero-admin check dropped"
+file = "src/RaindexInventory.sol"
+target = "admin_ == address(0) || "
+replacement = ""
+
+[[mutants]]
+name = "M02 ctor zero-raindex check dropped"
+file = "src/RaindexInventory.sol"
+target = " || address(raindex_) == address(0)"
+replacement = ""
+
+[[mutants]]
+name = "M03 RAINDEX bound to wrong address"
+file = "src/RaindexInventory.sol"
+target = "RAINDEX = raindex_;"
+replacement = "RAINDEX = IRaindexV6(address(1));"
+
+[[mutants]]
+name = "M04 admin role granted to deployer"
+file = "src/RaindexInventory.sol"
+target = "_grantRole(DEFAULT_ADMIN_ROLE, admin_);"
+replacement = "_grantRole(DEFAULT_ADMIN_ROLE, msg.sender);"
+
+[[mutants]]
+name = "M05 OPERATOR_ROLE hash changed"
+file = "src/RaindexInventory.sol"
+target = "keccak256(\"OPERATOR_ROLE\")"
+replacement = "keccak256(\"OPERATOR\")"
+
+[[mutants]]
+name = "M06 gate excludes admin"
+file = "src/RaindexInventory.sol"
+target = "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(OPERATOR_ROLE, msg.sender)"
+replacement = "!hasRole(OPERATOR_ROLE, msg.sender)"
+
+[[mutants]]
+name = "M07 gate excludes operator"
+file = "src/RaindexInventory.sol"
+target = "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(OPERATOR_ROLE, msg.sender)"
+replacement = "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)"
+
+[[mutants]]
+name = "M08 gate and->or"
+file = "src/RaindexInventory.sol"
+target = "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(OPERATOR_ROLE, msg.sender)"
+replacement = "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) || !hasRole(OPERATOR_ROLE, msg.sender)"
+
+[[mutants]]
+name = "M09 gate error names admin role"
+file = "src/RaindexInventory.sol"
+target = "revert IAccessControl.AccessControlUnauthorizedAccount(msg.sender, OPERATOR_ROLE);"
+replacement = "revert IAccessControl.AccessControlUnauthorizedAccount(msg.sender, DEFAULT_ADMIN_ROLE);"
+
+[[mutants]]
+name = "M10 gate error account zero"
+file = "src/RaindexInventory.sol"
+target = "revert IAccessControl.AccessControlUnauthorizedAccount(msg.sender, OPERATOR_ROLE);"
+replacement = "revert IAccessControl.AccessControlUnauthorizedAccount(address(0), OPERATOR_ROLE);"
+
+[[mutants]]
+name = "M11 withdraw RBAC dropped"
+file = "src/RaindexInventory.sol"
+target = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n"
+
+[[mutants]]
+name = "M12 withdraw pause dropped"
+file = "src/RaindexInventory.sol"
+target = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n"
+
+[[mutants]]
+name = "M13 withdraw nonReentrant dropped"
+file = "src/RaindexInventory.sol"
+target = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n"
+
+[[mutants]]
+name = "M15 withdraw balBefore zero"
+file = "src/RaindexInventory.sol"
+target = "uint256 balBefore = IERC20(token).balanceOf(address(this));"
+replacement = "uint256 balBefore = 0;"
+
+[[mutants]]
+name = "M17 withdraw shortfall < -> <="
+file = "src/RaindexInventory.sol"
+target = "if (received < requested)"
+replacement = "if (received <= requested)"
+
+[[mutants]]
+name = "M18 withdraw shortfall tolerates 1"
+file = "src/RaindexInventory.sol"
+target = "if (received < requested)"
+replacement = "if (received + 1 < requested)"
+
+[[mutants]]
+name = "M19 withdraw error args swapped"
+file = "src/RaindexInventory.sol"
+target = "revert InsufficientVaultLiquidity(token, requested, received);"
+replacement = "revert InsufficientVaultLiquidity(token, received, requested);"
+
+[[mutants]]
+name = "M22 withdraw forwards requested"
+file = "src/RaindexInventory.sol"
+target = "SafeERC20.safeTransfer(IERC20(token), msg.sender, received);"
+replacement = "SafeERC20.safeTransfer(IERC20(token), msg.sender, requested);"
+
+[[mutants]]
+name = "M23 withdraw forwards to raindex"
+file = "src/RaindexInventory.sol"
+target = "SafeERC20.safeTransfer(IERC20(token), msg.sender, received);"
+replacement = "SafeERC20.safeTransfer(IERC20(token), address(RAINDEX), received);"
+
+[[mutants]]
+name = "M24 withdraw event dropped"
+file = "src/RaindexInventory.sol"
+target = "emit OperatorWithdraw(msg.sender, token, vaultId, received);"
+replacement = ""
+
+[[mutants]]
+name = "M25 withdraw event amount requested"
+file = "src/RaindexInventory.sol"
+target = "emit OperatorWithdraw(msg.sender, token, vaultId, received);"
+replacement = "emit OperatorWithdraw(msg.sender, token, vaultId, requested);"
+
+[[mutants]]
+name = "M26 withdraw event vault zero"
+file = "src/RaindexInventory.sol"
+target = "emit OperatorWithdraw(msg.sender, token, vaultId, received);"
+replacement = "emit OperatorWithdraw(msg.sender, token, bytes32(0), received);"
+
+[[mutants]]
+name = "M27 deposit RBAC dropped"
+file = "src/RaindexInventory.sol"
+target = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n"
+
+[[mutants]]
+name = "M28 deposit pause dropped"
+file = "src/RaindexInventory.sol"
+target = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n"
+
+[[mutants]]
+name = "M29 deposit nonReentrant dropped"
+file = "src/RaindexInventory.sol"
+target = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n"
+
+[[mutants]]
+name = "M31 deposit round-up dropped"
+file = "src/RaindexInventory.sol"
+target = "if (!exact) amount += 1;"
+replacement = ""
+
+[[mutants]]
+name = "M32 deposit round-up inverted"
+file = "src/RaindexInventory.sol"
+target = "if (!exact) amount += 1;"
+replacement = "if (exact) amount += 1;"
+
+[[mutants]]
+name = "M33 deposit round-up by 2"
+file = "src/RaindexInventory.sol"
+target = "if (!exact) amount += 1;"
+replacement = "if (!exact) amount += 2;"
+
+[[mutants]]
+name = "M34 deposit pulls one extra"
+file = "src/RaindexInventory.sol"
+target = "SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);"
+replacement = "SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount + 1);"
+
+[[mutants]]
+name = "M38 deposit event dropped"
+file = "src/RaindexInventory.sol"
+target = "emit OperatorDeposit(msg.sender, token, vaultId, amount);"
+replacement = ""
+
+[[mutants]]
+name = "M39 deposit event amount zero"
+file = "src/RaindexInventory.sol"
+target = "emit OperatorDeposit(msg.sender, token, vaultId, amount);"
+replacement = "emit OperatorDeposit(msg.sender, token, vaultId, 0);"
+
+[[mutants]]
+name = "M40 addOrder4 gate dropped"
+file = "src/RaindexInventory.sol"
+target = "function addOrder4(OrderConfigV4 calldata config, TaskV2[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n"
+replacement = "function addOrder4(OrderConfigV4 calldata config, TaskV2[] calldata tasks)\n        external\n"
+
+[[mutants]]
+name = "M41 addOrder4 return false"
+file = "src/RaindexInventory.sol"
+target = "return RAINDEX.addOrder4(config, tasks);"
+replacement = "RAINDEX.addOrder4(config, tasks);\n        return false;"
+
+[[mutants]]
+name = "M42 removeOrder3 gate dropped"
+file = "src/RaindexInventory.sol"
+target = "function removeOrder3(OrderV4 calldata order, TaskV2[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n"
+replacement = "function removeOrder3(OrderV4 calldata order, TaskV2[] calldata tasks)\n        external\n"
+
+[[mutants]]
+name = "M43 removeOrder3 return false"
+file = "src/RaindexInventory.sol"
+target = "return RAINDEX.removeOrder3(order, tasks);"
+replacement = "RAINDEX.removeOrder3(order, tasks);\n        return false;"
+
+[[mutants]]
+name = "M44 entask2 gate dropped"
+file = "src/RaindexInventory.sol"
+target = "function entask2(TaskV2[] calldata tasks) external onlyRole(DEFAULT_ADMIN_ROLE) {"
+replacement = "function entask2(TaskV2[] calldata tasks) external {"
+
+[[mutants]]
+name = "M45 entask2 not forwarded"
+file = "src/RaindexInventory.sol"
+target = "RAINDEX.entask2(tasks);"
+replacement = ""
+
+[[mutants]]
+name = "M46 vaultBalance2 ignores owner"
+file = "src/RaindexInventory.sol"
+target = "return RAINDEX.vaultBalance2(owner_, token, vaultId);"
+replacement = "return RAINDEX.vaultBalance2(address(this), token, vaultId);"
+
+[[mutants]]
+name = "M47 orderExists negated"
+file = "src/RaindexInventory.sol"
+target = "return RAINDEX.orderExists(orderHash);"
+replacement = "return !RAINDEX.orderExists(orderHash);"
+
+[[mutants]]
+name = "M48 quote2 outputs swapped"
+file = "src/RaindexInventory.sol"
+target = "return RAINDEX.quote2(quoteConfig);"
+replacement = "(bool e, Float o, Float r) = RAINDEX.quote2(quoteConfig);\n        return (e, r, o);"
+
+[[mutants]]
+name = "M49 pause gate dropped"
+file = "src/RaindexInventory.sol"
+target = "function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {"
+replacement = "function pause() external {"
+
+[[mutants]]
+name = "M50 unpause gate dropped"
+file = "src/RaindexInventory.sol"
+target = "function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {"
+replacement = "function unpause() external {"
+
+[[mutants]]
+name = "M51 pause no-op"
+file = "src/RaindexInventory.sol"
+target = "        _pause();\n"
+replacement = ""
+
+[[mutants]]
+name = "M52 unpause no-op"
+file = "src/RaindexInventory.sol"
+target = "        _unpause();\n"
+replacement = ""
+
+[[mutants]]
+name = "M53 rescue gate dropped"
+file = "src/RaindexInventory.sol"
+target = "function rescue(address token, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {"
+replacement = "function rescue(address token, uint256 amount) external {"
+
+[[mutants]]
+name = "M54 rescue halves amount"
+file = "src/RaindexInventory.sol"
+target = "SafeERC20.safeTransfer(IERC20(token), msg.sender, amount);"
+replacement = "SafeERC20.safeTransfer(IERC20(token), msg.sender, amount / 2);"
+
+[[mutants]]
+name = "M55 rescue to raindex"
+file = "src/RaindexInventory.sol"
+target = "SafeERC20.safeTransfer(IERC20(token), msg.sender, amount);"
+replacement = "SafeERC20.safeTransfer(IERC20(token), address(RAINDEX), amount);"
+
+[[mutants]]
+name = "M64 withdraw passes unfloored target"
+file = "src/RaindexInventory.sol"
+target = "RAINDEX.withdraw4(token, vaultId, flooredTarget, tasks);"
+replacement = "RAINDEX.withdraw4(token, vaultId, targetAmount, tasks);"
+
+[[mutants]]
+name = "M65 withdraw re-pack at 18dp"
+file = "src/RaindexInventory.sol"
+target = "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, decimals);"
+replacement = "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, 18);"
+
+[[mutants]]
+name = "M66 withdraw re-pack +1 unit"
+file = "src/RaindexInventory.sol"
+target = "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, decimals);"
+replacement = "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested + 1, decimals);"
+
+[[mutants]]
+name = "M67 withdraw tasks dropped"
+file = "src/RaindexInventory.sol"
+target = "RAINDEX.withdraw4(token, vaultId, flooredTarget, tasks);"
+replacement = "RAINDEX.withdraw4(token, vaultId, flooredTarget, new TaskV2[](0));"
+
+[[mutants]]
+name = "M61b withdraw floor decimals fixed 18"
+file = "src/RaindexInventory.sol"
+target = "uint8 decimals = IERC20Metadata(token).decimals();\n        // Floor to token precision"
+replacement = "uint8 decimals = 18;\n        // Floor to token precision"
+
+[[mutants]]
+name = "M71 deposit task gate dropped"
+file = "src/RaindexInventory.sol"
+target = "    {\n        _onlyAdminTasks(tasks);\n        uint8 decimals = IERC20Metadata(token).decimals();\n        (uint256 amount, bool exact)"
+replacement = "    {\n        uint8 decimals = IERC20Metadata(token).decimals();\n        (uint256 amount, bool exact)"
+
+[[mutants]]
+name = "M72 task gate ignores empty"
+file = "src/RaindexInventory.sol"
+target = "if (tasks.length != 0 && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();"
+replacement = "if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();"
+
+[[mutants]]
+name = "M73 task gate blocks admin too"
+file = "src/RaindexInventory.sol"
+target = "if (tasks.length != 0 && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();"
+replacement = "if (tasks.length != 0) revert OperatorTasksForbidden();"
+
+[[mutants]]
+name = "M74 zero withdraw no-op"
+file = "src/RaindexInventory.sol"
+target = "if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);"
+replacement = "if (requested == 0) return;"
+
+[[mutants]]
+name = "M75 zero withdraw error vault zero"
+file = "src/RaindexInventory.sol"
+target = "if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);"
+replacement = "if (requested == 0) revert ZeroWithdrawAmount(token, bytes32(0));"
+
+[[mutants]]
+name = "M76 deposit credits unrounded"
+file = "src/RaindexInventory.sol"
+target = "RAINDEX.deposit4(token, vaultId, charged, tasks);"
+replacement = "RAINDEX.deposit4(token, vaultId, depositAmount, tasks);"
+
+[[mutants]]
+name = "M77 deposit approves max"
+file = "src/RaindexInventory.sol"
+target = "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);"
+replacement = "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), type(uint256).max);"
+
+[[mutants]]
+name = "M78 deposit approves +1"
+file = "src/RaindexInventory.sol"
+target = "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);"
+replacement = "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount + 1);"
+
+[[mutants]]
+name = "M79 deposit charged repack 18dp"
+file = "src/RaindexInventory.sol"
+target = "LibDecimalFloat.fromFixedDecimalLosslessPacked(amount, decimals);"
+replacement = "LibDecimalFloat.fromFixedDecimalLosslessPacked(amount, 18);"
+
+[[mutants]]
+name = "M80 deposit decimals fixed 6"
+file = "src/RaindexInventory.sol"
+target = "(uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(decimals);"
+replacement = "(uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(6);"
+
+[[mutants]]
+name = "M81 deposit tasks dropped"
+file = "src/RaindexInventory.sol"
+target = "RAINDEX.deposit4(token, vaultId, charged, tasks);"
+replacement = "RAINDEX.deposit4(token, vaultId, charged, new TaskV2[](0));"
+
+[[mutants]]
+name = "M82 deposit wrong vault"
+file = "src/RaindexInventory.sol"
+target = "RAINDEX.deposit4(token, vaultId, charged, tasks);"
+replacement = "RAINDEX.deposit4(token, bytes32(0), charged, tasks);"
+
+[[mutants]]
+name = "M83 deposit approval dropped"
+file = "src/RaindexInventory.sol"
+target = "        SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);\n"
+replacement = ""
+
+[[mutants]]
+name = "M84 zero withdraw guard dropped"
+file = "src/RaindexInventory.sol"
+target = "        if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);\n"
+replacement = ""
+
+[[mutants]]
+name = "M70 withdraw task gate dropped"
+file = "src/RaindexInventory.sol"
+target = "        _onlyAdminTasks(tasks);\n        // Raindex debits the vault"
+replacement = "        // Raindex debits the vault"

@@ -16,6 +16,9 @@ path = [
   "README.md",
   "PLAN.md",
   "audit/mutation-test-scans.json",
+  "audit/mutation-ledger-2026-11-06.json",
+  "audit/known-issues.md",
+  "audit/mutation-probe/mutants.toml",
 ]
 SPDX-FileCopyrightText = "Copyright (c) 2020 Rain Open Source Software Ltd"
 SPDX-License-Identifier = "LicenseRef-DCL-1.0"
