@@ -168,6 +168,45 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         assertEq(IERC20(USDC).balanceOf(address(inv)), 0, "pool never dips, nothing stranded");
     }
 
+    /// @dev For any lossy target at 6 or 18 decimals, the caller receives the
+    /// floored amount and the vault is debited by exactly that amount.
+    function testFuzz_lossyWithdraw_vaultDebitEqualsSent(uint256 coefficient, uint8 extraDigits, bool weth) external {
+        extraDigits = uint8(bound(extraDigits, 1, 12));
+        address token = weth ? WETH : USDC;
+        uint8 dec = weth ? 18 : 6;
+        uint256 seed = weth ? 1e24 : 1e12;
+        _depositTokenAs(admin, token, seed, dec);
+        // Bounded so the target never exceeds the vault and the cast is safe.
+        coefficient = bound(coefficient, 10 ** extraDigits, seed * 10 ** extraDigits);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        Float target = LibDecimalFloat.packLossless(int256(coefficient), -int256(uint256(dec) + extraDigits));
+        uint256 expectedRaw = coefficient / 10 ** extraDigits;
+        (uint256 vaultBefore18,) = RAINDEX.vaultBalance2(address(inv), token, VAULT).toFixedDecimalLossy(18);
+        vm.prank(operator);
+        inv.withdraw4(token, VAULT, target, _noTasks());
+        (uint256 vaultAfter18,) = RAINDEX.vaultBalance2(address(inv), token, VAULT).toFixedDecimalLossy(18);
+        assertEq(IERC20(token).balanceOf(operator), expectedRaw, "caller receives the floored amount");
+        assertEq(vaultBefore18 - vaultAfter18, expectedRaw * 10 ** (18 - dec), "vault debited exactly what was sent");
+        assertEq(IERC20(token).balanceOf(address(inv)), 0, "nothing stranded");
+    }
+
+    /// @dev A WETH partial withdraw leaves exactly the remainder in the vault.
+    function test_weth_partialWithdraw_exactRemainder() external {
+        _depositTokenAs(admin, WETH, 10e18, 18);
+        vm.prank(operator);
+        inv.withdraw4(WETH, VAULT, _floatAt(1e18, 18), _noTasks());
+        assertEq(IERC20(WETH).balanceOf(operator), 1e18, "operator received 1 WETH");
+        assertEq(_vaultRaw(WETH, VAULT), 9e18, "vault keeps exactly 9 WETH");
+    }
+
+    function _depositTokenAs(address who, address token, uint256 amount, uint8 dec) internal {
+        deal(token, who, amount);
+        vm.startPrank(who);
+        IERC20(token).approve(address(inv), amount);
+        inv.deposit4(token, VAULT, _floatAt(amount, dec), _noTasks());
+        vm.stopPrank();
+    }
+
     /// @dev Two operators racing one vault: the first draw settles in full,
     /// the second either settles in full (if covered) or reverts atomically
     /// with the exact shortfall — never a partial fill.
