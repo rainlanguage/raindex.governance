@@ -341,6 +341,16 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         assertEq(IERC20(USDC).balanceOf(address(inv)), 0, "nothing stranded on the inventory");
     }
 
+    /// @dev One raw unit is the smallest target that still reaches Raindex.
+    function test_withdraw_oneRawUnit_settles() external {
+        _depositAs(admin, VAULT, 5e6);
+        uint256 opBefore = IERC20(USDC).balanceOf(operator);
+        vm.prank(operator);
+        inv.withdraw4(USDC, VAULT, _float(1), _noTasks());
+        assertEq(IERC20(USDC).balanceOf(operator) - opBefore, 1, "one raw unit is not a no-op");
+        assertEq(_vaultRaw(USDC, VAULT), 5e6 - 1, "vault debited one raw unit");
+    }
+
     // ---- event payloads ----
 
     /// @dev The test-base event mirrors must match the contract's ABI, or
