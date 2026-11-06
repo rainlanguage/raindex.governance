@@ -10,10 +10,11 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Property fuzz tests for `RaindexInventory` (RAI-1193): conservation
-/// against the caller, over-draw fails atomically, RBAC over arbitrary
-/// addresses, pause fails closed on every fund path, rounding never dips the
-/// pool, concurrent operators. All against the live Base Raindex.
+/// @notice Property fuzz tests for `RaindexInventory`: conservation against the
+/// caller, over-draw fails atomically, RBAC over arbitrary addresses, pause
+/// fails closed on `deposit4` and `withdraw4` (`rescue` is not pause-gated),
+/// rounding never dips the pool, concurrent operators. All against the live
+/// Base Raindex.
 contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
     using LibDecimalFloat for Float;
 

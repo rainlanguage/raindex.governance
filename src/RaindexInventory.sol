@@ -75,7 +75,8 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     event OperatorWithdraw(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
 
     /// @notice A [`deposit4`] settled: `amount` raw units of `token` were
-    /// pulled from the caller and deposited into `vaultId`.
+    /// pulled from the caller for `vaultId`. For a lossy Float `amount` is
+    /// rounded up, so it can exceed the vault credit by up to one raw unit.
     /// @param operator The caller (admin or operator) the funds were pulled from.
     /// @param token The token deposited.
     /// @param vaultId The Raindex vault credited.
@@ -274,9 +275,11 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         _unpause();
     }
 
-    /// @notice Sweep stray balances / dust to the caller (admin). The contract
-    /// never holds funds at rest — vault capital lives in Raindex — so
-    /// anything here is a donation or mistake. Not pause-gated.
+    /// @notice Sweep stray balances / dust to the caller (admin). Orders placed
+    /// through this contract are expected to use vaults, so it holds no funds at
+    /// rest and anything here is a donation or mistake. A vaultless order would
+    /// draw on this balance, and sweeping it would starve that order. Not
+    /// pause-gated.
     /// @param token The token to sweep.
     /// @param amount The raw amount to sweep to the caller.
     function rescue(address token, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
