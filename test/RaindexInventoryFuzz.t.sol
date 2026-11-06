@@ -80,8 +80,8 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
     }
 
     /// @dev No address without a role ever moves funds or reaches admin
-    /// surfaces: every gated entrypoint rejects an arbitrary stranger with the
-    /// exact missing role.
+    /// surfaces: the fund paths, order management, pause, rescue and role
+    /// administration reject an arbitrary stranger with the exact missing role.
     function testFuzz_rbac_strangerAlwaysRejected(address stranger) external {
         vm.assume(stranger != admin && stranger != operator);
         _depositAs(admin, VAULT, 10e6);
@@ -113,12 +113,14 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         inv.rescue(USDC, 1);
         vm.expectRevert(adminGate);
         inv.grantRole(OPERATOR_ROLE, stranger);
+        vm.expectRevert(adminGate);
+        inv.revokeRole(OPERATOR_ROLE, operator);
         vm.stopPrank();
     }
 
-    /// @dev Paused ⇒ EVERY fund-movement path fails closed, for both roles and
-    /// any amount; order management stays open.
-    function testFuzz_pause_failsClosed_allFundPaths(uint256 amount, bool asAdmin) external {
+    /// @dev Paused ⇒ `deposit4` and `withdraw4` fail closed for both roles and
+    /// any amount; order management stays open. `rescue` is not pause-gated.
+    function testFuzz_pause_failsClosed_depositWithdraw(uint256 amount, bool asAdmin) external {
         amount = bound(amount, 1, 1e12);
         address caller = asAdmin ? admin : operator;
         _depositAs(admin, VAULT, amount);

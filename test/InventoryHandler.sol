@@ -9,6 +9,7 @@ import {TaskV2} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrde
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @dev Randomized driver for the invariant run. Two operators, the admin and
 /// a stranger act on one shared vault of the live Base Raindex through the
@@ -88,7 +89,7 @@ contract InventoryHandler is Test {
             if (expectFail) pauseBypassed = true;
             gDeposited += amount;
         } catch (bytes memory err) {
-            if (!expectFail) _unexpected(err);
+            if (!expectFail || _selector(err) != Pausable.EnforcedPause.selector) _unexpected(err);
         }
         vm.stopPrank();
     }
@@ -105,7 +106,18 @@ contract InventoryHandler is Test {
             if (overdraw) overdrawSettled = true;
             gWithdrawn += amount;
         } catch (bytes memory err) {
-            if (!paused && !overdraw) _unexpected(err);
+            if (paused) {
+                if (_selector(err) != Pausable.EnforcedPause.selector) _unexpected(err);
+            } else if (overdraw) {
+                // The shortfall must be the inventory's own atomic revert, with
+                // the exact amounts, not some other failure on the way.
+                bytes memory expected = abi.encodeWithSelector(
+                    RaindexInventory.InsufficientVaultLiquidity.selector, USDC_, amount, vaultBefore
+                );
+                if (keccak256(err) != keccak256(expected)) _unexpected(err);
+            } else {
+                _unexpected(err);
+            }
         }
     }
 
@@ -130,7 +142,8 @@ contract InventoryHandler is Test {
         gStray -= amount;
     }
 
-    /// @dev The stranger constantly probes every gated surface. Any success
+    /// @dev The stranger probes the fund paths, rescue, pause, unpause,
+    /// entask2 and role administration. Any success
     /// is an RBAC violation, and so is a revert for any reason other than the
     /// role check: the stranger is funded and has approved the inventory, so
     /// only the role gate can stop it.
@@ -164,15 +177,34 @@ contract InventoryHandler is Test {
         } catch (bytes memory err) {
             _expectUnauthorized(err);
         }
+        try INV.entask2(new TaskV2[](0)) {
+            rbacBypassed = true;
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
+        bytes32 operatorRole = INV.OPERATOR_ROLE();
+        try INV.grantRole(operatorRole, STRANGER) {
+            rbacBypassed = true;
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
+        try INV.revokeRole(operatorRole, operators[0]) {
+            rbacBypassed = true;
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
         vm.stopPrank();
     }
 
     function _expectUnauthorized(bytes memory err) internal {
+        if (_selector(err) != IAccessControl.AccessControlUnauthorizedAccount.selector) _unexpected(err);
+    }
+
+    function _selector(bytes memory err) internal pure returns (bytes4) {
+        if (err.length < 4) return bytes4(0);
         // Truncating to the leading 4 bytes is the point: that is the error selector.
         // forge-lint: disable-next-line(unsafe-typecast)
-        if (err.length < 4 || bytes4(err) != IAccessControl.AccessControlUnauthorizedAccount.selector) {
-            _unexpected(err);
-        }
+        return bytes4(err);
     }
 
     function _unexpected(bytes memory err) internal {

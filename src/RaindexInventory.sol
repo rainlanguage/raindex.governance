@@ -63,8 +63,10 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @notice The deployed Raindex (OrderBook) this contract owns orders in.
     IRaindexV6 public immutable RAINDEX;
 
-    /// @notice A [`withdraw4`] settled: `amount` raw units of `token` left
-    /// `vaultId` and were forwarded to the caller.
+    /// @notice A [`withdraw4`] forwarded a nonzero `amount` of `token` to the
+    /// caller. `amount` is what this contract received from Raindex for
+    /// `vaultId`, which can differ from the vault debit (for example a token
+    /// that over-delivers on transfer).
     /// @param operator The caller (admin or operator) the funds were sent to.
     /// @param token The token withdrawn.
     /// @param vaultId The Raindex vault drawn on.
@@ -243,8 +245,10 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         return RAINDEX.orderExists(orderHash);
     }
 
-    /// @notice Quote an order through this contract. Forwards verbatim to
-    /// `IRaindexV6.quote2`.
+    /// @notice Quote an order through this contract via `IRaindexV6.quote2`.
+    /// Raindex evaluates the quote with THIS contract as the counterparty, not
+    /// the original caller, so counterparty-dependent orders can quote
+    /// differently than a direct Raindex call.
     /// @param quoteConfig Forwarded verbatim to Raindex.
     /// @return exists Whether the quoted order exists.
     /// @return outputMax The maximum output as a Raindex decimal Float.

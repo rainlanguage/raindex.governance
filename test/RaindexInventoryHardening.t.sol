@@ -22,14 +22,12 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-/// @notice Gap-fill tests driven by the RAI-1193 adversarial mutation run:
-/// every test here pins a behavior whose targeted mutation SURVIVED the
-/// original 17-test suite. Fork tests against the live Base Raindex, same as
-/// `RaindexInventoryForkTest`.
+/// @notice Pins RaindexInventory's role gates, pause scope, forwarding and
+/// event payloads against the live Base Raindex.
 contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
     using LibDecimalFloat for Float;
 
-    // ---- constructor guards (mutants C1, C2 survived) ----
+    // ---- constructor guards ----
 
     function test_constructor_zeroAdmin_reverts() external {
         vm.expectRevert(RaindexInventory.ZeroAddress.selector);
@@ -41,10 +39,10 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         new RaindexInventory(admin, IRaindexV6(address(0)));
     }
 
-    // ---- OPERATOR_ROLE hash is a production ABI (mutant R3 survived) ----
+    // ---- OPERATOR_ROLE hash is a production ABI ----
 
-    /// @dev The deployed Bebop hook holds exactly this hash on the prod
-    /// inventory; changing the string literal silently severs that grant.
+    /// @dev Deployed operators hold grants of exactly this hash; changing the
+    /// string literal silently severs them.
     function test_operatorRole_exactHash() external view {
         assertEq(
             inv.OPERATOR_ROLE(),
@@ -53,7 +51,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         );
     }
 
-    // ---- rescue is admin-only (mutant A5 survived: gate drop was invisible) ----
+    // ---- rescue is admin-only ----
 
     function test_rescue_stranger_reverts() external {
         deal(USDC, address(inv), 42e6);
@@ -75,7 +73,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         inv.rescue(USDC, 42e6);
     }
 
-    // ---- unpause: gate and effect (mutants A3, A4 survived) ----
+    // ---- unpause: gate and effect ----
 
     function test_unpause_nonAdmin_reverts_whilePaused() external {
         vm.prank(admin);
@@ -111,8 +109,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         assertEq(IERC20(USDC).balanceOf(operator) - opBefore, 100e6, "withdraw works again after unpause");
     }
 
-    // ---- pause fails DEPOSIT closed too (mutant D2 survived: only the
-    // withdraw path was pinned) ----
+    // ---- pause fails deposit closed too ----
 
     function test_pause_blocksOperatorDeposit() external {
         deal(USDC, operator, 100e6);
@@ -145,7 +142,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         inv.withdraw4(USDC, VAULT, _float(100e6), _noTasks());
     }
 
-    // ---- order management gates (mutants O1, O3 survived) ----
+    // ---- order management gates ----
 
     function test_addOrder4_nonAdmin_reverts() external {
         OrderConfigV4 memory config;
@@ -165,8 +162,8 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         inv.removeOrder3(order, _noTasks());
     }
 
-    // ---- order management stays OPEN while paused (mutant O7 survived; the
-    // NatSpec kill-switch contract: admin can cancel orders mid-incident) ----
+    // ---- order management stays open while paused, so the admin can cancel
+    // orders mid-incident ----
 
     function test_orderManagement_worksWhilePaused() external {
         vm.prank(admin);
@@ -194,8 +191,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.clearMockedCalls();
     }
 
-    // ---- order management + view forwarding (mutants O2, O4, O6, V1, V2,
-    // V3 survived: nothing pinned that calls actually reach Raindex) ----
+    // ---- order management and view calls reach Raindex ----
 
     function test_addOrder4_forwardsToRaindex_andReturns() external {
         OrderConfigV4 memory config;
@@ -266,8 +262,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.clearMockedCalls();
     }
 
-    // ---- tasks are forwarded VERBATIM on the fund paths (round-2 mutants
-    // WT, DT survived: every prior test passed empty tasks) ----
+    // ---- tasks are forwarded verbatim on the fund paths ----
 
     /// @dev A recognizable non-empty task; never executed (the Raindex call is
     /// mocked), it only has to survive the abi.encode round-trip byte-exactly.
@@ -299,8 +294,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.clearMockedCalls();
     }
 
-    // ---- withdraw measures the DELTA, not the absolute balance (mutant W5
-    // survived: `balBefore = 0` was invisible) ----
+    // ---- withdraw measures the balance delta, not the absolute balance ----
 
     function test_withdraw_preservesStrayContractBalance() external {
         deal(USDC, address(inv), 42e6); // stray, not vault-backed
@@ -314,7 +308,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         assertEq(IERC20(USDC).balanceOf(address(inv)), 42e6, "stray balance NOT swept to the caller");
     }
 
-    // ---- events (mutants W8, D10 survived: zero event assertions existed) ----
+    // ---- event payloads ----
 
     /// @dev The test-base event mirrors must match the contract's ABI, or
     /// every `vm.expectEmit` above would check a stale signature.
@@ -341,7 +335,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.stopPrank();
     }
 
-    // ---- zero-received withdraw is a silent no-op (mutant W9 survived) ----
+    // ---- zero-received withdraw is a silent no-op ----
 
     function test_withdraw_zeroReceived_noTransferNoEvent() external {
         // Empty vault: Raindex withdraws min(target, 0) = 0. requested also

@@ -7,10 +7,11 @@ import {RaindexInventoryTestBase} from "./RaindexInventoryTestBase.sol";
 import {InventoryHandler} from "./InventoryHandler.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Invariant suite for `RaindexInventory` (RAI-1193), run against the
-/// live Base Raindex under randomized operator/admin action sequences.
-/// forge-config: default.invariant.runs = 4
-/// forge-config: default.invariant.depth = 50
+/// @notice Invariant suite for `RaindexInventory`, run against the live Base
+/// Raindex under randomized operator/admin action sequences. The budget
+/// (16 runs of 64 calls) is a CI budget, not proof over every sequence.
+/// forge-config: default.invariant.runs = 16
+/// forge-config: default.invariant.depth = 64
 /// forge-config: default.invariant.fail-on-revert = true
 contract RaindexInventoryInvariantTest is RaindexInventoryTestBase {
     InventoryHandler internal handler;
@@ -57,8 +58,8 @@ contract RaindexInventoryInvariantTest is RaindexInventoryTestBase {
         assertFalse(handler.overdrawSettled(), "an over-draw settled");
     }
 
-    /// @dev RBAC: the stranger's continuous probing of every gated surface
-    /// never once succeeded.
+    /// @dev RBAC: the stranger's probes of the fund paths, rescue, pause,
+    /// entask2 and role administration never once succeeded.
     function invariant_rbacHolds() external view {
         assertFalse(handler.rbacBypassed(), "an unauthorized call succeeded");
     }

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2020 Rain Open Source Software Ltd
 // SPDX-License-Identifier: LicenseRef-DCL-1.0
-pragma solidity =0.8.25;
+pragma solidity ^0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
@@ -12,7 +12,8 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 
 /// @notice Shared fork-test scaffolding for the `RaindexInventory` suites.
 /// Same live-Base setup as `RaindexInventoryForkTest`: the EXACT deployed
-/// Raindex at 0xe522…, real USDC, no mock Raindex anywhere.
+/// Raindex at 0xe522…, real USDC. A few forwarding tests mock single Raindex
+/// responses with `vm.mockCall`.
 abstract contract RaindexInventoryTestBase is Test {
     using LibDecimalFloat for Float;
 
