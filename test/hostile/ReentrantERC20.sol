@@ -20,6 +20,9 @@ contract ReentrantERC20 {
     bool internal inFlight;
     bool public reentrySucceeded;
     bytes4 public reentryRevertSelector;
+    /// @dev Set when the hook actually made the re-entrant call, so a test can
+    /// tell "the guard rejected it" from "the hook never ran".
+    bool public reentryFired;
 
     function mint(address to, uint256 amount) external {
         balanceOf[to] += amount;
@@ -33,6 +36,9 @@ contract ReentrantERC20 {
         reentryCalldata = reentryCalldata_;
         skipHooks = skipHooks_;
         armed = true;
+        reentryFired = false;
+        reentrySucceeded = false;
+        reentryRevertSelector = bytes4(0);
     }
 
     function approve(address spender, uint256 amount) external returns (bool) {
@@ -69,6 +75,7 @@ contract ReentrantERC20 {
             }
             inFlight = true;
             armed = false;
+            reentryFired = true;
             //slither-disable-next-line low-level-calls
             (bool ok, bytes memory ret) = target.call(reentryCalldata);
             reentrySucceeded = ok;

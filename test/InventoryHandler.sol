@@ -8,6 +8,7 @@ import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/I
 import {TaskV2} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 /// @dev Randomized driver for the invariant run. Two operators, the admin and
 /// a stranger act on one shared vault of the live Base Raindex through the
@@ -37,6 +38,7 @@ contract InventoryHandler is Test {
     bool public overdrawSettled; // an over-draw did not revert
     bool public rbacBypassed; // an unauthorized call succeeded
     bool public unexpectedOutcome; // a call succeeded/failed against expectation
+    bytes public lastUnexpectedRevert; // revert data behind the latest unexpectedOutcome
 
     constructor(
         RaindexInventory inv_,
@@ -82,8 +84,8 @@ contract InventoryHandler is Test {
         try INV.deposit4(USDC_, VAULT_, _float(amount), new TaskV2[](0)) {
             if (expectFail) pauseBypassed = true;
             gDeposited += amount;
-        } catch {
-            if (!expectFail) unexpectedOutcome = true;
+        } catch (bytes memory err) {
+            if (!expectFail) _unexpected(err);
         }
         vm.stopPrank();
     }
@@ -99,8 +101,8 @@ contract InventoryHandler is Test {
             if (paused) pauseBypassed = true;
             if (overdraw) overdrawSettled = true;
             gWithdrawn += amount;
-        } catch {
-            if (!paused && !overdraw) unexpectedOutcome = true;
+        } catch (bytes memory err) {
+            if (!paused && !overdraw) _unexpected(err);
         }
     }
 
@@ -125,27 +127,53 @@ contract InventoryHandler is Test {
         gStray -= amount;
     }
 
-    /// @dev The stranger constantly probes every gated surface; any success is
-    /// an RBAC violation.
+    /// @dev The stranger constantly probes every gated surface. Any success
+    /// is an RBAC violation, and so is a revert for any reason other than the
+    /// role check: the stranger is funded and has approved the inventory, so
+    /// only the role gate can stop it.
     function strangerProbe(uint256 amount) external {
         amount = bound(amount, 1, 1e9);
+        _fund(STRANGER, amount);
         vm.startPrank(STRANGER);
+        IERC20(USDC_).approve(address(INV), amount);
         try INV.withdraw4(USDC_, VAULT_, _float(amount), new TaskV2[](0)) {
             rbacBypassed = true;
-        } catch {}
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
         try INV.deposit4(USDC_, VAULT_, _float(amount), new TaskV2[](0)) {
             rbacBypassed = true;
-        } catch {}
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
         try INV.rescue(USDC_, amount) {
             rbacBypassed = true;
-        } catch {}
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
         try INV.pause() {
             rbacBypassed = true;
-        } catch {}
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
         try INV.unpause() {
             rbacBypassed = true;
-        } catch {}
+        } catch (bytes memory err) {
+            _expectUnauthorized(err);
+        }
         vm.stopPrank();
+    }
+
+    function _expectUnauthorized(bytes memory err) internal {
+        if (err.length < 4 || bytes4(err) != IAccessControl.AccessControlUnauthorizedAccount.selector) {
+            _unexpected(err);
+        }
+    }
+
+    function _unexpected(bytes memory err) internal {
+        unexpectedOutcome = true;
+        lastUnexpectedRevert = err;
+        emit log_named_bytes("unexpected revert", err);
     }
 
     function actorBalances() external view returns (uint256 total) {

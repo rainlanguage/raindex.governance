@@ -14,8 +14,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
     using LibDecimalFloat for Float;
 
-    event OperatorWithdraw(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
-
     bytes32 internal constant EVIL_VAULT = bytes32(uint256(0xe1));
 
     /// @dev The guard, not the RBAC gate, must be what stops a re-entrant
@@ -48,6 +46,7 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         vm.prank(operator);
         inv.withdraw4(address(evil), EVIL_VAULT, _float(5e6), _noTasks());
 
+        assertTrue(evil.reentryFired(), "re-entry hook fired");
         assertFalse(evil.reentrySucceeded(), "re-entrant withdraw4 must revert");
         assertEq(
             evil.reentryRevertSelector(),
@@ -77,6 +76,7 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         inv.deposit4(address(evil), EVIL_VAULT, _float(10e6), _noTasks());
         vm.stopPrank();
 
+        assertTrue(evil.reentryFired(), "re-entry hook fired");
         assertFalse(evil.reentrySucceeded(), "re-entrant deposit4 must revert");
         assertEq(
             evil.reentryRevertSelector(),

@@ -22,6 +22,12 @@ abstract contract RaindexInventoryTestBase is Test {
 
     bytes32 internal constant VAULT = bytes32(uint256(1));
 
+    /// @dev Mirrors of the inventory's events for `vm.expectEmit`. Keep them
+    /// identical to `RaindexInventory`; `test_eventSelectorsMatchContract`
+    /// fails if they drift.
+    event OperatorWithdraw(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
+    event OperatorDeposit(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
+
     RaindexInventory internal inv;
     address internal admin = makeAddr("admin");
     address internal operator = makeAddr("operator");
@@ -57,8 +63,8 @@ abstract contract RaindexInventoryTestBase is Test {
         return _floatAt(amount, 6);
     }
 
-    /// @dev `who` must hold a role; deals + approves + deposits `amount` of
-    /// USDC to `vaultId`.
+    /// @dev `who` must hold `DEFAULT_ADMIN_ROLE` or `OPERATOR_ROLE`; deals +
+    /// approves + deposits `amount` of USDC to `vaultId`.
     function _depositAs(address who, bytes32 vaultId, uint256 amount) internal {
         deal(USDC, who, amount);
         vm.startPrank(who);

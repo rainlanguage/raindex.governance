@@ -9,9 +9,12 @@
     "skillVersion": "0.30.0",
     "summary": {
       "behaviours": 45,
-      "probes": 35,
+      "probes": 50,
+      "probesFirstRound": 35,
+      "probesSecondRound": 15,
       "killedByExistingSuite": 23,
       "survivorsClosedByNewTests": 27,
+      "note": "probes = killedByExistingSuite + survivorsClosedByNewTests. The first round probed 35 mutants (23 killed, 12 survived); a second round added 15 probes, all survivors, for 27 closed in total.",
       "candidates": 2,
       "confirmed": 2,
       "filed": ["#4", "#5"]

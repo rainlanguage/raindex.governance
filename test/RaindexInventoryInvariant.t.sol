@@ -67,6 +67,11 @@ contract RaindexInventoryInvariantTest is RaindexInventoryTestBase {
     /// handler's model (paused / over-draw), so the run actually exercised
     /// what it claims.
     function invariant_modelMatchesOutcomes() external view {
-        assertFalse(handler.unexpectedOutcome(), "a call outcome contradicted the model");
+        assertFalse(
+            handler.unexpectedOutcome(),
+            string.concat(
+                "a call outcome contradicted the model; last revert: ", vm.toString(handler.lastUnexpectedRevert())
+            )
+        );
     }
 }

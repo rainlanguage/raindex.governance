@@ -29,9 +29,6 @@ import {Vm} from "forge-std/Vm.sol";
 contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
     using LibDecimalFloat for Float;
 
-    event OperatorWithdraw(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
-    event OperatorDeposit(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
-
     // ---- constructor guards (mutants C1, C2 survived) ----
 
     function test_constructor_zeroAdmin_reverts() external {
@@ -318,6 +315,13 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
     }
 
     // ---- events (mutants W8, D10 survived: zero event assertions existed) ----
+
+    /// @dev The test-base event mirrors must match the contract's ABI, or
+    /// every `vm.expectEmit` above would check a stale signature.
+    function test_eventSelectorsMatchContract() external pure {
+        assertEq(OperatorWithdraw.selector, RaindexInventory.OperatorWithdraw.selector, "OperatorWithdraw mirror");
+        assertEq(OperatorDeposit.selector, RaindexInventory.OperatorDeposit.selector, "OperatorDeposit mirror");
+    }
 
     function test_withdraw_emitsOperatorWithdraw() external {
         _depositAs(admin, VAULT, 100e6);
