@@ -4,8 +4,8 @@ pragma solidity =0.8.25;
 
 import {RaindexInventoryTestBase} from "./RaindexInventoryTestBase.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
-import {TaskV2, OrderConfigV4, OrderV4} from "raindex-interface-0.1.2/src/interface/deprecated/v5/IOrderBookV5.sol";
-import {LibDecimalFloat, Float} from "rain-math-float-0.1.1/src/lib/LibDecimalFloat.sol";
+import {TaskV2, OrderConfigV4, OrderV4} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";

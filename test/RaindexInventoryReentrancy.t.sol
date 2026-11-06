@@ -6,8 +6,8 @@ import {RaindexInventoryTestBase} from "./RaindexInventoryTestBase.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
 import {ReentrantERC20} from "./hostile/ReentrantERC20.sol";
 import {DonatingERC20} from "./hostile/DonatingERC20.sol";
-import {TaskV2} from "raindex-interface-0.1.2/src/interface/deprecated/v5/IOrderBookV5.sol";
-import {LibDecimalFloat, Float} from "rain-math-float-0.1.1/src/lib/LibDecimalFloat.sol";
+import {TaskV2} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
