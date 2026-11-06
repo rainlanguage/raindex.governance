@@ -166,6 +166,67 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
 
         assertEq(IERC20(USDC).balanceOf(operator), 0, "caller charged exactly the rounded-up amount");
         assertEq(IERC20(USDC).balanceOf(address(inv)), 0, "pool never dips, nothing stranded");
+        (uint256 vault18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
+        assertEq(vault18, charged * 1e12, "vault credited exactly the charge");
+        assertEq(IERC20(USDC).allowance(address(inv), address(RAINDEX)), 0, "no allowance left");
+    }
+
+    /// @dev The same deposit rule at 18 decimals: a WETH amount with more
+    /// precision than the token is charged the ceiling, and the vault is
+    /// credited exactly that.
+    function testFuzz_lossyDeposit_weth_creditsCharge(uint256 coefficient) external {
+        coefficient = bound(coefficient, 1, 1e25); // up to 1M WETH at 19dp
+        // forge-lint: disable-next-line(unsafe-typecast)
+        Float f = LibDecimalFloat.packLossless(int256(coefficient), -19);
+        uint256 charged = coefficient / 10 + (coefficient % 10 == 0 ? 0 : 1);
+        deal(WETH, operator, charged);
+        vm.startPrank(operator);
+        IERC20(WETH).approve(address(inv), charged);
+        inv.deposit4(WETH, VAULT, f, _noTasks());
+        vm.stopPrank();
+        assertEq(IERC20(WETH).balanceOf(operator), 0, "caller charged exactly the ceiling");
+        assertEq(IERC20(WETH).balanceOf(address(inv)), 0, "nothing stranded");
+        assertEq(_vaultRaw(WETH, VAULT), charged, "vault credited exactly the charge");
+        assertEq(IERC20(WETH).allowance(address(inv), address(RAINDEX)), 0, "no allowance left");
+    }
+
+    /// @dev For any lossy target at 6 or 18 decimals, the caller receives the
+    /// floored amount and the vault is debited by exactly that amount.
+    function testFuzz_lossyWithdraw_vaultDebitEqualsSent(uint256 coefficient, uint8 extraDigits, bool weth) external {
+        extraDigits = uint8(bound(extraDigits, 1, 12));
+        address token = weth ? WETH : USDC;
+        uint8 dec = weth ? 18 : 6;
+        uint256 seed = weth ? 1e24 : 1e12;
+        _depositTokenAs(admin, token, seed, dec);
+        // Bounded so the target never exceeds the vault and the cast is safe.
+        coefficient = bound(coefficient, 10 ** extraDigits, seed * 10 ** extraDigits);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        Float target = LibDecimalFloat.packLossless(int256(coefficient), -int256(uint256(dec) + extraDigits));
+        uint256 expectedRaw = coefficient / 10 ** extraDigits;
+        (uint256 vaultBefore18,) = RAINDEX.vaultBalance2(address(inv), token, VAULT).toFixedDecimalLossy(18);
+        vm.prank(operator);
+        inv.withdraw4(token, VAULT, target, _noTasks());
+        (uint256 vaultAfter18,) = RAINDEX.vaultBalance2(address(inv), token, VAULT).toFixedDecimalLossy(18);
+        assertEq(IERC20(token).balanceOf(operator), expectedRaw, "caller receives the floored amount");
+        assertEq(vaultBefore18 - vaultAfter18, expectedRaw * 10 ** (18 - dec), "vault debited exactly what was sent");
+        assertEq(IERC20(token).balanceOf(address(inv)), 0, "nothing stranded");
+    }
+
+    /// @dev A WETH partial withdraw leaves exactly the remainder in the vault.
+    function test_weth_partialWithdraw_exactRemainder() external {
+        _depositTokenAs(admin, WETH, 10e18, 18);
+        vm.prank(operator);
+        inv.withdraw4(WETH, VAULT, _floatAt(1e18, 18), _noTasks());
+        assertEq(IERC20(WETH).balanceOf(operator), 1e18, "operator received 1 WETH");
+        assertEq(_vaultRaw(WETH, VAULT), 9e18, "vault keeps exactly 9 WETH");
+    }
+
+    function _depositTokenAs(address who, address token, uint256 amount, uint8 dec) internal {
+        deal(token, who, amount);
+        vm.startPrank(who);
+        IERC20(token).approve(address(inv), amount);
+        inv.deposit4(token, VAULT, _floatAt(amount, dec), _noTasks());
+        vm.stopPrank();
     }
 
     /// @dev For any lossy target at 6 or 18 decimals, the caller receives the

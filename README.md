@@ -45,9 +45,11 @@ are safe — the loser's transaction simply reverts, never a short fill.
   balance to itself, so the role is only ever granted to audited contracts and
   stays admin-grantable/revocable. Point `DEFAULT_ADMIN_ROLE` at a multisig
   (and, if desired, a timelock) for production.
-- **`pause()`** is the kill switch: it fails `deposit4` / `withdraw4` closed
-  while leaving order management open, so the admin can cancel orders during an
-  incident.
+- **`pause()`** is the kill switch: `deposit4` / `withdraw4` revert for the
+  admin and operators. It does not touch Raindex: live orders owned by the
+  inventory keep clearing against its vaults, so incident response must also
+  `removeOrder3` them. Order management stays open for that, and `rescue` stays
+  available for stray balances.
 - `nonReentrant` on `deposit4` / `withdraw4`; `deposit4` approves Raindex for
   exactly the amount it deposits, so no standing allowance is left.
 

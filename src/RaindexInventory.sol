@@ -51,12 +51,15 @@ import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalF
 /// The trust boundary is `OPERATOR_ROLE`: an operator can withdraw a vault's
 /// balance to itself, so the role is only ever granted to audited contracts and
 /// stays admin-grantable/revocable. [`pause`] is the kill switch: while paused,
-/// [`deposit4`] and [`withdraw4`] revert `EnforcedPause` for every caller, the
-/// admin included, so no vault capital moves through this contract. Order
-/// management stays available, so the admin can cancel orders during an
-/// incident. [`rescue`] is deliberately *not* pause-gated: it only moves stray
-/// balances held by this contract, never vault capital (that lives in
-/// Raindex), and must stay available for incident recovery.
+/// [`deposit4`] and [`withdraw4`] revert `EnforcedPause` for the admin and every
+/// operator (a caller without a role still fails the role check first), so no
+/// vault capital moves through this contract. Pause does NOT touch Raindex: the
+/// orders this contract owns stay live and keep clearing against its vaults,
+/// so incident response must also [`removeOrder3`] each live order. Order
+/// management stays available for that reason. [`rescue`] is deliberately
+/// *not* pause-gated: it only moves stray balances held by this contract, never
+/// vault capital (that lives in Raindex), and must stay available for incident
+/// recovery.
 contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall {
     using LibDecimalFloat for Float;
 
@@ -169,26 +172,20 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         nonReentrant
     {
         _onlyAdminTasks(tasks);
-        // Floor the target to the token's precision and hand Raindex THAT
-        // float, not the caller's raw `targetAmount`. Raindex debits the vault
-        // by the float it is given but can only transfer whole raw units, so a
-        // sub-precision `targetAmount` would have it debit more than it moves —
-        // the remainder burned from the shared pool with no revert (the floored
-        // `requested` never trips the liquidity check). Passing the floored
-        // float keeps Raindex's debit equal to what actually leaves the vault.
+        // Raindex debits the vault by the Float it is given but transfers only
+        // whole raw units, so it is handed the target floored to the token's
+        // precision: its debit then equals what leaves the vault.
         uint8 decimals = IERC20Metadata(token).decimals();
         // Floor to token precision: the discarded `exact` bool is deliberate.
         //slither-disable-next-line unused-return
         (uint256 requested,) = targetAmount.toFixedDecimalLossy(decimals);
 
-        // A target below one raw unit floors to zero: nothing can be withdrawn.
-        // Revert like Raindex does for a zero target, rather than hand Raindex
-        // the sub-unit Float (which would burn the remainder).
+        // A target below one raw unit floors to zero; revert like Raindex does
+        // for a zero target.
         if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);
 
-        // Re-pack the floored raw amount; exact for any real balance.
-        //slither-disable-next-line unused-return
-        (Float flooredTarget,) = LibDecimalFloat.fromFixedDecimalLossyPacked(requested, decimals);
+        // Reverts rather than hand Raindex a target that differs from `requested`.
+        Float flooredTarget = LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, decimals);
         uint256 balBefore = IERC20(token).balanceOf(address(this));
         RAINDEX.withdraw4(token, vaultId, flooredTarget, tasks);
         uint256 received = IERC20(token).balanceOf(address(this)) - balBefore;
@@ -223,9 +220,9 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         uint8 decimals = IERC20Metadata(token).decimals();
         (uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(decimals);
         if (!exact) amount += 1; // charge the ceiling, never less than asked
-        // Exact for any real balance, so Raindex credits and pulls `amount`.
-        //slither-disable-next-line unused-return
-        (Float charged,) = LibDecimalFloat.fromFixedDecimalLossyPacked(amount, decimals);
+        // Lossless, so Raindex credits and pulls exactly `amount` (reverts
+        // otherwise).
+        Float charged = LibDecimalFloat.fromFixedDecimalLosslessPacked(amount, decimals);
         SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);
         // Exact allowance: Raindex can never pull stray balances from here.
         SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);
@@ -312,9 +309,10 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     // Admin
     // ---------------------------------------------------------------------
 
-    /// @notice Kill switch — fails [`deposit4`] / [`withdraw4`] closed. Order
-    /// management is left available so the admin can cancel orders during an
-    /// incident.
+    /// @notice Kill switch: [`deposit4`] and [`withdraw4`] revert
+    /// `EnforcedPause` for the admin and operators. Raindex keeps clearing the
+    /// live orders this contract owns, so incident response must also
+    /// [`removeOrder3`] them; order management stays available for that.
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
