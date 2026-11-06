@@ -43,11 +43,14 @@ contract InventoryHandler is Test {
     constructor(
         RaindexInventory inv_,
         IRaindexV6 raindex_,
+        // forge-lint: disable-next-line(missing-zero-check)
         address usdc_,
         bytes32 vaultId_,
+        // forge-lint: disable-next-line(missing-zero-check)
         address admin_,
         address op1_,
         address op2_,
+        // forge-lint: disable-next-line(missing-zero-check)
         address stranger_
     ) {
         INV = inv_;
@@ -116,7 +119,7 @@ contract InventoryHandler is Test {
     function donate(uint256 amount) external {
         amount = bound(amount, 1, 1e9);
         _fund(address(this), amount);
-        IERC20(USDC_).transfer(address(INV), amount);
+        assertTrue(IERC20(USDC_).transfer(address(INV), amount), "donation transfer");
         gStray += amount;
     }
 
@@ -165,6 +168,8 @@ contract InventoryHandler is Test {
     }
 
     function _expectUnauthorized(bytes memory err) internal {
+        // Truncating to the leading 4 bytes is the point: that is the error selector.
+        // forge-lint: disable-next-line(unsafe-typecast)
         if (err.length < 4 || bytes4(err) != IAccessControl.AccessControlUnauthorizedAccount.selector) {
             _unexpected(err);
         }

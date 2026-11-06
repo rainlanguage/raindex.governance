@@ -31,6 +31,7 @@ contract ReentrantERC20 {
 
     /// @param skipHooks_ Number of transfer hooks to let pass before firing,
     /// to choose WHERE in the call chain the re-entry happens.
+    // forge-lint: disable-next-line(missing-zero-check)
     function arm(address target_, bytes calldata reentryCalldata_, uint256 skipHooks_) external {
         target = target_;
         reentryCalldata = reentryCalldata_;
@@ -79,6 +80,8 @@ contract ReentrantERC20 {
             //slither-disable-next-line low-level-calls
             (bool ok, bytes memory ret) = target.call(reentryCalldata);
             reentrySucceeded = ok;
+            // Truncating to the leading 4 bytes is the point: that is the error selector.
+            // forge-lint: disable-next-line(unsafe-typecast)
             if (!ok && ret.length >= 4) reentryRevertSelector = bytes4(ret);
             inFlight = false;
         }

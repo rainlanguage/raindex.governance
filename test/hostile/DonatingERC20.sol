@@ -22,6 +22,8 @@ contract DonatingERC20 {
         totalSupply += amount;
     }
 
+    // Test-only hostile token: a zero beneficiary simply disables the donation.
+    // forge-lint: disable-next-line(missing-zero-check)
     function setDonation(address beneficiary_, uint256 bonus_) external {
         beneficiary = beneficiary_;
         bonus = bonus_;

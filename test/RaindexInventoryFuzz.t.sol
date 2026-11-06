@@ -148,6 +148,8 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
     /// (the inventory's own balance) never dips.
     function testFuzz_lossyDeposit_neverDipsPool(uint256 coefficient) external {
         coefficient = bound(coefficient, 1, 1e13); // up to 1M USDC at 7dp
+        // `coefficient` is bounded to 1e13 above, so the cast cannot truncate.
+        // forge-lint: disable-next-line(unsafe-typecast)
         Float f = LibDecimalFloat.packLossless(int256(coefficient), -7); // 7dp value on a 6dp token
         bool exact = coefficient % 10 == 0;
         uint256 charged = coefficient / 10 + (exact ? 0 : 1);
