@@ -4,6 +4,7 @@ version = 1
 path = [
   ".envrc",
   ".github/workflows/**",
+  ".github/pull_request_template.md",
   ".gitignore",
   "flake.lock",
   "flake.nix",
