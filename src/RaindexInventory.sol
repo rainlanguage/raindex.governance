@@ -82,8 +82,8 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     event OperatorWithdraw(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
 
     /// @notice A [`deposit4`] settled: `amount` raw units of `token` were
-    /// pulled from the caller for `vaultId`. For a lossy Float `amount` is
-    /// rounded up, so it can exceed the vault credit by up to one raw unit.
+    /// pulled from the caller and credited to `vaultId`. For a lossy Float
+    /// `amount` is the rounded-up charge, and the vault is credited exactly it.
     /// @param operator The caller (admin or operator) the funds were pulled from.
     /// @param token The token deposited.
     /// @param vaultId The Raindex vault credited.
