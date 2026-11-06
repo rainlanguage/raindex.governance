@@ -124,7 +124,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         inv.deposit4(USDC, VAULT, _float(100e6), _noTasks());
     }
 
-    function test_pause_blocksAdminFundMovement() external {
+    function test_pause_blocksAdminVaultMovement() external {
         _depositAs(admin, VAULT, 100e6);
         deal(USDC, admin, 50e6);
         vm.prank(admin);
@@ -140,6 +140,19 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.prank(admin);
         vm.expectRevert(Pausable.EnforcedPause.selector);
         inv.withdraw4(USDC, VAULT, _float(100e6), _noTasks());
+    }
+
+    /// @dev `rescue` is deliberately not pause-gated: incident recovery of
+    /// stray balances must work while the vault paths are frozen.
+    function test_rescue_worksWhilePaused() external {
+        deal(USDC, address(inv), 7e6);
+        vm.startPrank(admin);
+        inv.pause();
+        inv.rescue(USDC, 7e6);
+        vm.stopPrank();
+        assertTrue(inv.paused(), "still paused");
+        assertEq(IERC20(USDC).balanceOf(admin), 7e6, "admin swept the stray balance while paused");
+        assertEq(IERC20(USDC).balanceOf(address(inv)), 0, "nothing left on the inventory");
     }
 
     // ---- order management gates ----
