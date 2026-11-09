@@ -323,10 +323,12 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     }
 
     /// @notice Sweep stray balances / dust to the caller (admin). Orders placed
-    /// through this contract are expected to use vaults, so it holds no funds at
-    /// rest and anything here is a donation or mistake. A vaultless order would
-    /// draw on this balance, and sweeping it would starve that order. Not
-    /// pause-gated.
+    /// through this contract are expected to use vaults, not vault 0
+    /// (vaultless IO). A vault-0 output cannot draw on this balance, because
+    /// this contract never leaves an allowance to Raindex. A vault-0 input
+    /// pays its proceeds into this balance, where `vaultBalance2` does not
+    /// show them and `withdraw5` cannot reach them: only `rescue` moves them
+    /// out. Not pause-gated.
     /// @param token The token to sweep.
     /// @param amount The raw amount to sweep to the caller.
     function rescue(address token, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {

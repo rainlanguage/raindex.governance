@@ -12,7 +12,12 @@ import {
     QuoteV3
 } from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
-import {EvaluableV4, IInterpreterV4, IInterpreterStoreV3} from "rainlang-0.2.30/src/interface/IInterpreterCallerV5.sol";
+import {
+    EvaluableV4,
+    IInterpreterV4,
+    IInterpreterStoreV3,
+    SignedContextV2
+} from "rainlang-0.2.30/src/interface/IInterpreterCallerV5.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -258,6 +263,9 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
     function test_quote3_forwardsToRaindex() external {
         QuoteV3 memory quoteConfig;
+        quoteConfig.inputIOIndex = 1;
+        quoteConfig.outputIOIndex = 2;
+        quoteConfig.signedContext = _signedContext();
         bytes memory expected = abi.encodeCall(IRaindexV7.quote3, (quoteConfig));
         vm.mockCall(
             address(RAINDEX),
@@ -279,6 +287,17 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         tasks = new TaskV3[](1);
         tasks[0].evaluable =
             EvaluableV4(IInterpreterV4(address(0xdeadbeef)), IInterpreterStoreV3(address(0xcafe)), hex"c0de");
+        tasks[0].signedContext = _signedContext();
+    }
+
+    /// @dev One V7 `SignedContextV2` with every field distinct and nonzero, so
+    /// a byte-exact calldata check covers the nested V7 struct.
+    function _signedContext() internal pure returns (SignedContextV2[] memory signed) {
+        bytes32[] memory context = new bytes32[](2);
+        context[0] = bytes32(uint256(0x11));
+        context[1] = bytes32(uint256(0x22));
+        signed = new SignedContextV2[](1);
+        signed[0] = SignedContextV2(address(0x5167), bytes32(uint256(0xd0)), context, hex"5167a7e5");
     }
 
     function test_withdraw5_forwardsTasksToRaindex() external {
@@ -415,8 +434,8 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
     // ---- Raindex V7 vault 0 ----
 
-    /// @dev V7 reserves vault 0 for vaultless orders (the owner's wallet
-    /// balance capped by its allowance). The inventory forwards vault 0 and
+    /// @dev Raindex (V6 and V7) reserves vault 0 for vaultless orders (the
+    /// owner's wallet balance capped by its allowance). The inventory forwards vault 0 and
     /// Raindex rejects it, so no operator can move funds through vault 0.
     function test_vault0_depositAndWithdraw_revertZeroVaultId() external {
         deal(USDC, operator, 1e6);

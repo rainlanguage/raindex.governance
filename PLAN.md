@@ -71,15 +71,18 @@ reverts and it retries. No partial fills, no over-draw.
 
 Moving an existing, already-owned Raindex position under a `RaindexInventory`:
 
-1. Deploy `RaindexInventory(admin, raindex)`.
+1. Deploy `RaindexInventory(admin, RAINDEX_V7)` with `script/Deploy.sol`.
 2. Re-create the orders under the inventory (it must be the `msg.sender`/owner),
    and move the vault balances across (withdraw from the old owner, deposit
-   through the inventory). Do this in a quiet window — orders are briefly
-   absent.
+   through the inventory). Orders are rebuilt for V7 from their source, never
+   replayed from V6 calldata: V7 signed context is `SignedContextV2`.
 3. `grantRole(OPERATOR_ROLE, consumer)` for each consumer contract.
 4. Repoint each consumer at the inventory address.
 
-This is a deliberate, supervised migration, not a hot swap.
+This is a deliberate, supervised migration, not a hot swap. For a move from a V6
+`RaindexInventory`, `script/MigrateInventory.sol` builds steps 2 and 3 as admin
+transactions and checks the end state on a fork first. The runbook is
+[`docs/migrate-to-v7.md`](./docs/migrate-to-v7.md).
 
 ## Status
 
