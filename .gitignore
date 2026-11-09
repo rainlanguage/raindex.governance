@@ -11,3 +11,4 @@ node_modules
 .fixes
 .pre-commit-config.yaml
 .claude
+.tmp

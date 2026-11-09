@@ -1,10 +1,12 @@
 name: Deploy RaindexInventory
 # Manual, parameterised deploy of a fresh RaindexInventory. Not the shared
 # rainix reusable workflow: that one only forwards a `suite` string, whereas a
-# RaindexInventory needs its two constructor args (admin, raindex) supplied at
-# dispatch — and this neutral repo must bake in no deployment-specific
-# addresses. Uses the same PRIVATE_KEY / RPC / Etherscan secrets as every other
-# rain deploy, and the repo's own pinned nix dev shell for forge.
+# RaindexInventory needs its admin supplied at dispatch. The Raindex is not an
+# input: it is always the released V7 (script/lib/RaindexV7Release.sol), and
+# the script reverts if the chain has other code there. No deployment-specific
+# address (admin, operators) is baked in. Uses the same PRIVATE_KEY / RPC /
+# Etherscan secrets as every other rain deploy, and the repo's own pinned nix
+# dev shell for forge.
 on:
   workflow_dispatch:
     inputs:
@@ -17,19 +19,14 @@ on:
           - base-sepolia
           - bsc
           - ethereum
-          - hyperevm
           - robinhood
       admin:
         description: "DEFAULT_ADMIN_ROLE holder — the inventory owner"
         required: true
         type: string
-      raindex:
-        description: "Raindex OrderBook (IRaindexV7) address"
-        required: true
-        type: string
       legacy:
         description: >-
-          Send type-0 (legacy) transactions. Automatically enabled for HyperEVM; this input can also enable them on another network.
+          Send type-0 (legacy) transactions, for a network that needs them.
         required: false
         default: false
         type: boolean
@@ -55,12 +52,11 @@ jobs:
         if: hashFiles('soldeer.lock') != ''
         run: nix develop -c forge soldeer install
       - name: Deploy RaindexInventory
-        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ (inputs.legacy || inputs.network == 'hyperevm') && '--legacy' || '' }} ${{ inputs.verify && (inputs.network == 'robinhood' && '--verify --verifier sourcify' || '--verify') || '' }}
+        run: nix develop -c forge script script/Deploy.sol:Deploy -vvvvv --slow --broadcast ${{ inputs.legacy && '--legacy' || '' }} ${{ inputs.verify && (inputs.network == 'robinhood' && '--verify --verifier sourcify' || '--verify') || '' }}
         env:
           DEPLOYMENT_SUITE: ${{ inputs.network }}
           DEPLOYMENT_KEY: ${{ secrets.PRIVATE_KEY }}
           INVENTORY_ADMIN: ${{ inputs.admin }}
-          INVENTORY_RAINDEX: ${{ inputs.raindex }}
           BASE_RPC_URL: ${{ secrets.RPC_URL_BASE_FORK || vars.RPC_URL_BASE_FORK || '' }}
           BASE_SEPOLIA_RPC_URL: ${{ secrets.RPC_URL_BASE_SEPOLIA_FORK || vars.RPC_URL_BASE_SEPOLIA_FORK || '' }}
           BSC_RPC_URL: ${{ secrets.RPC_URL_BSC_FORK || vars.RPC_URL_BSC_FORK || '' }}

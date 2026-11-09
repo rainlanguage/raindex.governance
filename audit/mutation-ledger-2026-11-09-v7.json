@@ -1,0 +1,842 @@
+{
+  "probeStarted": "2026-11-09T13:38:29Z",
+  "probeFinished": "2026-11-09T13:52:08Z",
+  "tool": "adversarial-mutation-test mutants (audit/mutation-probe/mutants.toml), run by a local runner",
+  "scope": "src/RaindexInventory.sol after the Raindex V7 port",
+  "scannedCommit": "2355da60e3bdd681303e37f880e134b39ffb8567",
+  "scannedSourceBlob": "e9695a673e7dabd087df913e8b05bcfcd365fc2c",
+  "scannedSourceNote": "Probed at the head of PR #34 (the V7 port). A squash merge rewrites that commit; the src blob probed is scannedSourceBlob. The next PR changes src only in the rescue NatSpec.",
+  "suite": {
+    "command": "anvil --fork-url <public Base RPC> --port 8547 (latest block, 55203936 when the fork started); for each mutant: apply target -> replacement once to src/RaindexInventory.sol, then sh audit/mutation-probe/check.sh. A nonzero exit is KILLED, exit 2 (RPC failure) is retried and never scored as a kill, exit 0 is SURVIVED.",
+    "env": {
+      "BASE_RPC_URL": "http://127.0.0.1:8547",
+      "FOUNDRY_FUZZ_SEED": "0x5eed",
+      "FOUNDRY_FUZZ_RUNS": "256",
+      "FOUNDRY_INVARIANT_RUNS": "16",
+      "FOUNDRY_INVARIANT_DEPTH": "32",
+      "FOUNDRY_INVARIANT_SHRINK_RUN_LIMIT": "0"
+    },
+    "forge": "1.7.1-dev",
+    "raindex": "Raindex V7 0x91b95120D085Aa99C05167f3767eB63460c1dCaC (raindex.deploy sol-v0.1.17)"
+  },
+  "baseline": {
+    "exit": 0,
+    "tests": 69,
+    "passed": 69,
+    "note": "Unmutated source, same command."
+  },
+  "summary": {
+    "mutants": 67,
+    "killed": 67,
+    "survived": 0,
+    "noRun": 0
+  },
+  "mutants": [
+    {
+      "id": "M01",
+      "behaviour": "ctor zero-admin check dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "admin_ == address(0) || ",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_constructor_zeroAdmin_reverts"
+      ]
+    },
+    {
+      "id": "M02",
+      "behaviour": "ctor zero-raindex check dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": " || address(raindex_) == address(0)",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_constructor_zeroRaindex_reverts"
+      ]
+    },
+    {
+      "id": "M03",
+      "behaviour": "RAINDEX bound to wrong address",
+      "file": "src/RaindexInventory.sol",
+      "target": "RAINDEX = raindex_;",
+      "replacement": "RAINDEX = IRaindexV7(address(1));",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M04",
+      "behaviour": "admin role granted to deployer",
+      "file": "src/RaindexInventory.sol",
+      "target": "_grantRole(DEFAULT_ADMIN_ROLE, admin_);",
+      "replacement": "_grantRole(DEFAULT_ADMIN_ROLE, msg.sender);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "setUp"
+      ]
+    },
+    {
+      "id": "M05",
+      "behaviour": "OPERATOR_ROLE hash changed",
+      "file": "src/RaindexInventory.sol",
+      "target": "keccak256(\"OPERATOR_ROLE\")",
+      "replacement": "keccak256(\"OPERATOR\")",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_operatorRole_exactHash"
+      ]
+    },
+    {
+      "id": "M06",
+      "behaviour": "gate excludes admin",
+      "file": "src/RaindexInventory.sol",
+      "target": "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(OPERATOR_ROLE, msg.sender)",
+      "replacement": "!hasRole(OPERATOR_ROLE, msg.sender)",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_adminDeposit_thenWithdraw_toCaller",
+        "test_multicall_batchesAdminDeposits",
+        "test_operatorRole_grantAndRevoke"
+      ]
+    },
+    {
+      "id": "M07",
+      "behaviour": "gate excludes operator",
+      "file": "src/RaindexInventory.sol",
+      "target": "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(OPERATOR_ROLE, msg.sender)",
+      "replacement": "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M08",
+      "behaviour": "gate and->or",
+      "file": "src/RaindexInventory.sol",
+      "target": "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(OPERATOR_ROLE, msg.sender)",
+      "replacement": "!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) || !hasRole(OPERATOR_ROLE, msg.sender)",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M09",
+      "behaviour": "gate error names admin role",
+      "file": "src/RaindexInventory.sol",
+      "target": "revert IAccessControl.AccessControlUnauthorizedAccount(msg.sender, OPERATOR_ROLE);",
+      "replacement": "revert IAccessControl.AccessControlUnauthorizedAccount(msg.sender, DEFAULT_ADMIN_ROLE);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_multicall_preservesGate",
+        "test_operatorRole_grantAndRevoke"
+      ]
+    },
+    {
+      "id": "M10",
+      "behaviour": "gate error account zero",
+      "file": "src/RaindexInventory.sol",
+      "target": "revert IAccessControl.AccessControlUnauthorizedAccount(msg.sender, OPERATOR_ROLE);",
+      "replacement": "revert IAccessControl.AccessControlUnauthorizedAccount(address(0), OPERATOR_ROLE);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_multicall_preservesGate",
+        "test_operatorRole_grantAndRevoke",
+        "test_unauthorized_cannotDeposit"
+      ]
+    },
+    {
+      "id": "M11",
+      "behaviour": "withdraw RBAC dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n",
+      "replacement": "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_operatorRole_grantAndRevoke",
+        "test_unauthorized_cannotWithdraw"
+      ]
+    },
+    {
+      "id": "M12",
+      "behaviour": "withdraw pause dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n",
+      "replacement": "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_pause_failsClosed_depositWithdraw",
+        "test_pause_blocksOperatorFunds"
+      ]
+    },
+    {
+      "id": "M13",
+      "behaviour": "withdraw nonReentrant dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n",
+      "replacement": "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M15",
+      "behaviour": "withdraw balBefore zero",
+      "file": "src/RaindexInventory.sol",
+      "target": "uint256 balBefore = IERC20(token).balanceOf(address(this));",
+      "replacement": "uint256 balBefore = 0;",
+      "verdict": "KILLED",
+      "killedBy": []
+    },
+    {
+      "id": "M17",
+      "behaviour": "withdraw shortfall < -> <=",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (received < requested)",
+      "replacement": "if (received <= requested)",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_concurrentOperators_loserRevertsAtomically",
+        "testFuzz_depositWithdraw_conservation_usdc",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M18",
+      "behaviour": "withdraw shortfall tolerates 1",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (received < requested)",
+      "replacement": "if (received + 1 < requested)",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_overdraw_reverts"
+      ]
+    },
+    {
+      "id": "M19",
+      "behaviour": "withdraw error args swapped",
+      "file": "src/RaindexInventory.sol",
+      "target": "revert InsufficientVaultLiquidity(token, requested, received);",
+      "replacement": "revert InsufficientVaultLiquidity(token, received, requested);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_concurrentOperators_loserRevertsAtomically",
+        "testFuzz_overdraw_reverts",
+        "test_withdraw_insufficientLiquidity_reverts"
+      ]
+    },
+    {
+      "id": "M22",
+      "behaviour": "withdraw forwards requested",
+      "file": "src/RaindexInventory.sol",
+      "target": "SafeERC20.safeTransfer(IERC20(token), msg.sender, received);",
+      "replacement": "SafeERC20.safeTransfer(IERC20(token), msg.sender, requested);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_withdraw_forwardsEverythingReceived_overDelivery"
+      ]
+    },
+    {
+      "id": "M23",
+      "behaviour": "withdraw forwards to raindex",
+      "file": "src/RaindexInventory.sol",
+      "target": "SafeERC20.safeTransfer(IERC20(token), msg.sender, received);",
+      "replacement": "SafeERC20.safeTransfer(IERC20(token), address(RAINDEX), received);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_adminDeposit_thenWithdraw_toCaller",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M24",
+      "behaviour": "withdraw event dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "emit OperatorWithdraw(msg.sender, token, vaultId, received);",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_withdraw_emitsOperatorWithdraw",
+        "test_withdraw_forwardsEverythingReceived_overDelivery"
+      ]
+    },
+    {
+      "id": "M25",
+      "behaviour": "withdraw event amount requested",
+      "file": "src/RaindexInventory.sol",
+      "target": "emit OperatorWithdraw(msg.sender, token, vaultId, received);",
+      "replacement": "emit OperatorWithdraw(msg.sender, token, vaultId, requested);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_withdraw_forwardsEverythingReceived_overDelivery"
+      ]
+    },
+    {
+      "id": "M26",
+      "behaviour": "withdraw event vault zero",
+      "file": "src/RaindexInventory.sol",
+      "target": "emit OperatorWithdraw(msg.sender, token, vaultId, received);",
+      "replacement": "emit OperatorWithdraw(msg.sender, token, bytes32(0), received);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_withdraw_emitsOperatorWithdraw",
+        "test_withdraw_forwardsEverythingReceived_overDelivery"
+      ]
+    },
+    {
+      "id": "M27",
+      "behaviour": "deposit RBAC dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n",
+      "replacement": "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_multicall_preservesGate",
+        "test_unauthorized_cannotDeposit"
+      ]
+    },
+    {
+      "id": "M28",
+      "behaviour": "deposit pause dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n",
+      "replacement": "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_pause_failsClosed_depositWithdraw",
+        "test_pause_blocksAdminVaultMovement",
+        "test_pause_blocksOperatorDeposit"
+      ]
+    },
+    {
+      "id": "M29",
+      "behaviour": "deposit nonReentrant dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n",
+      "replacement": "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M31",
+      "behaviour": "deposit round-up dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (!exact) amount += 1;",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_lossyDeposit_neverDipsPool",
+        "testFuzz_lossyDeposit_weth_creditsCharge",
+        "test_deposit_lossyFloat_chargesRoundedUp_noPoolDip"
+      ]
+    },
+    {
+      "id": "M32",
+      "behaviour": "deposit round-up inverted",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (!exact) amount += 1;",
+      "replacement": "if (exact) amount += 1;",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M33",
+      "behaviour": "deposit round-up by 2",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (!exact) amount += 1;",
+      "replacement": "if (!exact) amount += 2;",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_lossyDeposit_neverDipsPool",
+        "testFuzz_lossyDeposit_weth_creditsCharge",
+        "test_deposit_lossyFloat_chargesRoundedUp_noPoolDip"
+      ]
+    },
+    {
+      "id": "M34",
+      "behaviour": "deposit pulls one extra",
+      "file": "src/RaindexInventory.sol",
+      "target": "SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);",
+      "replacement": "SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount + 1);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M38",
+      "behaviour": "deposit event dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "emit OperatorDeposit(msg.sender, token, vaultId, amount);",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_emitsOperatorDeposit"
+      ]
+    },
+    {
+      "id": "M39",
+      "behaviour": "deposit event amount zero",
+      "file": "src/RaindexInventory.sol",
+      "target": "emit OperatorDeposit(msg.sender, token, vaultId, amount);",
+      "replacement": "emit OperatorDeposit(msg.sender, token, vaultId, 0);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_emitsOperatorDeposit"
+      ]
+    },
+    {
+      "id": "M40",
+      "behaviour": "addOrder5 gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "function addOrder5(OrderConfigV4 calldata config, TaskV3[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n",
+      "replacement": "function addOrder5(OrderConfigV4 calldata config, TaskV3[] calldata tasks)\n        external\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_addOrder5_nonAdmin_reverts"
+      ]
+    },
+    {
+      "id": "M41",
+      "behaviour": "addOrder5 return false",
+      "file": "src/RaindexInventory.sol",
+      "target": "return RAINDEX.addOrder5(config, tasks);",
+      "replacement": "RAINDEX.addOrder5(config, tasks);\n        return false;",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_addOrder5_forwardsToRaindex_andReturns",
+        "test_orderManagement_worksWhilePaused"
+      ]
+    },
+    {
+      "id": "M42",
+      "behaviour": "removeOrder4 gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "function removeOrder4(OrderV4 calldata order, TaskV3[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n",
+      "replacement": "function removeOrder4(OrderV4 calldata order, TaskV3[] calldata tasks)\n        external\n",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_removeOrder4_nonAdmin_reverts"
+      ]
+    },
+    {
+      "id": "M43",
+      "behaviour": "removeOrder4 return false",
+      "file": "src/RaindexInventory.sol",
+      "target": "return RAINDEX.removeOrder4(order, tasks);",
+      "replacement": "RAINDEX.removeOrder4(order, tasks);\n        return false;",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_removeOrder4_forwardsToRaindex_andReturns"
+      ]
+    },
+    {
+      "id": "M44",
+      "behaviour": "entask3 gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "function entask3(TaskV3[] calldata tasks) external onlyRole(DEFAULT_ADMIN_ROLE) {",
+      "replacement": "function entask3(TaskV3[] calldata tasks) external {",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_orderManagement_onlyAdmin"
+      ]
+    },
+    {
+      "id": "M45",
+      "behaviour": "entask3 not forwarded",
+      "file": "src/RaindexInventory.sol",
+      "target": "RAINDEX.entask3(tasks);",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_entask3_forwardsToRaindex"
+      ]
+    },
+    {
+      "id": "M46",
+      "behaviour": "vaultBalance2 ignores owner",
+      "file": "src/RaindexInventory.sol",
+      "target": "return RAINDEX.vaultBalance2(owner_, token, vaultId);",
+      "replacement": "return RAINDEX.vaultBalance2(address(this), token, vaultId);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_vaultBalance2_forwardsToRaindex"
+      ]
+    },
+    {
+      "id": "M47",
+      "behaviour": "orderExists negated",
+      "file": "src/RaindexInventory.sol",
+      "target": "return RAINDEX.orderExists(orderHash);",
+      "replacement": "return !RAINDEX.orderExists(orderHash);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_orderExists_forwardsToRaindex"
+      ]
+    },
+    {
+      "id": "M48",
+      "behaviour": "quote3 outputs swapped",
+      "file": "src/RaindexInventory.sol",
+      "target": "return RAINDEX.quote3(quoteConfig);",
+      "replacement": "(bool e, Float o, Float r) = RAINDEX.quote3(quoteConfig);\n        return (e, r, o);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_quote3_forwardsToRaindex"
+      ]
+    },
+    {
+      "id": "M49",
+      "behaviour": "pause gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {",
+      "replacement": "function pause() external {",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_pause_onlyAdmin"
+      ]
+    },
+    {
+      "id": "M50",
+      "behaviour": "unpause gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {",
+      "replacement": "function unpause() external {",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_rbac_strangerAlwaysRejected",
+        "test_unpause_nonAdmin_reverts_whilePaused"
+      ]
+    },
+    {
+      "id": "M51",
+      "behaviour": "pause no-op",
+      "file": "src/RaindexInventory.sol",
+      "target": "        _pause();\n",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_pause_failsClosed_depositWithdraw",
+        "test_pause_blocksAdminVaultMovement",
+        "test_pause_blocksOperatorFunds"
+      ]
+    },
+    {
+      "id": "M52",
+      "behaviour": "unpause no-op",
+      "file": "src/RaindexInventory.sol",
+      "target": "        _unpause();\n",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_unpause_restoresFundMovement"
+      ]
+    },
+    {
+      "id": "M53",
+      "behaviour": "rescue gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "function rescue(address token, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {",
+      "replacement": "function rescue(address token, uint256 amount) external {",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_rescue_operator_reverts",
+        "test_rescue_stranger_reverts"
+      ]
+    },
+    {
+      "id": "M54",
+      "behaviour": "rescue halves amount",
+      "file": "src/RaindexInventory.sol",
+      "target": "SafeERC20.safeTransfer(IERC20(token), msg.sender, amount);",
+      "replacement": "SafeERC20.safeTransfer(IERC20(token), msg.sender, amount / 2);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_rescue_sweepsStrayTokens_toAdmin",
+        "test_rescue_worksWhilePaused"
+      ]
+    },
+    {
+      "id": "M55",
+      "behaviour": "rescue to raindex",
+      "file": "src/RaindexInventory.sol",
+      "target": "SafeERC20.safeTransfer(IERC20(token), msg.sender, amount);",
+      "replacement": "SafeERC20.safeTransfer(IERC20(token), address(RAINDEX), amount);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_rescue_sweepsStrayTokens_toAdmin",
+        "test_rescue_worksWhilePaused"
+      ]
+    },
+    {
+      "id": "M64",
+      "behaviour": "withdraw passes unfloored target",
+      "file": "src/RaindexInventory.sol",
+      "target": "RAINDEX.withdraw5(token, vaultId, flooredTarget, tasks);",
+      "replacement": "RAINDEX.withdraw5(token, vaultId, targetAmount, tasks);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_lossyWithdraw_vaultDebitEqualsSent",
+        "test_withdraw_subPrecisionTarget_burnsNoVaultDust"
+      ]
+    },
+    {
+      "id": "M65",
+      "behaviour": "withdraw re-pack at 18dp",
+      "file": "src/RaindexInventory.sol",
+      "target": "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, decimals);",
+      "replacement": "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, 18);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_concurrentOperators_loserRevertsAtomically",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M66",
+      "behaviour": "withdraw re-pack +1 unit",
+      "file": "src/RaindexInventory.sol",
+      "target": "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, decimals);",
+      "replacement": "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested + 1, decimals);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_operatorTasks_forbidden",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M67",
+      "behaviour": "withdraw tasks dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "RAINDEX.withdraw5(token, vaultId, flooredTarget, tasks);",
+      "replacement": "RAINDEX.withdraw5(token, vaultId, flooredTarget, new TaskV3[](0));",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_withdraw5_forwardsTasksToRaindex"
+      ]
+    },
+    {
+      "id": "M61b",
+      "behaviour": "withdraw floor decimals fixed 18",
+      "file": "src/RaindexInventory.sol",
+      "target": "uint8 decimals = IERC20Metadata(token).decimals();\n        // Floor to token precision",
+      "replacement": "uint8 decimals = 18;\n        // Floor to token precision",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_adminDeposit_thenWithdraw_toCaller",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M71",
+      "behaviour": "deposit task gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "    {\n        _onlyAdminTasks(tasks);\n        uint8 decimals = IERC20Metadata(token).decimals();\n        (uint256 amount, bool exact)",
+      "replacement": "    {\n        uint8 decimals = IERC20Metadata(token).decimals();\n        (uint256 amount, bool exact)",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_operatorTasks_forbidden"
+      ]
+    },
+    {
+      "id": "M72",
+      "behaviour": "task gate ignores empty",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (tasks.length != 0 && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();",
+      "replacement": "if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M73",
+      "behaviour": "task gate blocks admin too",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (tasks.length != 0 && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();",
+      "replacement": "if (tasks.length != 0) revert OperatorTasksForbidden();",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit5_forwardsTasksToRaindex",
+        "test_withdraw5_forwardsTasksToRaindex"
+      ]
+    },
+    {
+      "id": "M74",
+      "behaviour": "zero withdraw no-op",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);",
+      "replacement": "if (requested == 0) return;",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_withdraw_subUnitOrZeroTarget_reverts"
+      ]
+    },
+    {
+      "id": "M75",
+      "behaviour": "zero withdraw error vault zero",
+      "file": "src/RaindexInventory.sol",
+      "target": "if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);",
+      "replacement": "if (requested == 0) revert ZeroWithdrawAmount(token, bytes32(0));",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_withdraw_subUnitOrZeroTarget_reverts"
+      ]
+    },
+    {
+      "id": "M76",
+      "behaviour": "deposit credits unrounded",
+      "file": "src/RaindexInventory.sol",
+      "target": "RAINDEX.deposit5(token, vaultId, charged, tasks);",
+      "replacement": "RAINDEX.deposit5(token, vaultId, depositAmount, tasks);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_lossyDeposit_neverDipsPool",
+        "testFuzz_lossyDeposit_weth_creditsCharge",
+        "test_deposit_lossyFloat_chargesRoundedUp_noPoolDip"
+      ]
+    },
+    {
+      "id": "M77",
+      "behaviour": "deposit approves max",
+      "file": "src/RaindexInventory.sol",
+      "target": "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);",
+      "replacement": "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), type(uint256).max);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_lossyDeposit_neverDipsPool",
+        "testFuzz_lossyDeposit_weth_creditsCharge",
+        "test_vault0_balanceZero_withStrayBalance"
+      ]
+    },
+    {
+      "id": "M78",
+      "behaviour": "deposit approves +1",
+      "file": "src/RaindexInventory.sol",
+      "target": "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);",
+      "replacement": "SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount + 1);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_lossyDeposit_neverDipsPool",
+        "testFuzz_lossyDeposit_weth_creditsCharge",
+        "test_vault0_balanceZero_withStrayBalance"
+      ]
+    },
+    {
+      "id": "M79",
+      "behaviour": "deposit charged repack 18dp",
+      "file": "src/RaindexInventory.sol",
+      "target": "LibDecimalFloat.fromFixedDecimalLosslessPacked(amount, decimals);",
+      "replacement": "LibDecimalFloat.fromFixedDecimalLosslessPacked(amount, 18);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_concurrentOperators_loserRevertsAtomically",
+        "testFuzz_depositWithdraw_conservation_usdc",
+        "testFuzz_lossyDeposit_neverDipsPool"
+      ]
+    },
+    {
+      "id": "M80",
+      "behaviour": "deposit decimals fixed 6",
+      "file": "src/RaindexInventory.sol",
+      "target": "(uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(decimals);",
+      "replacement": "(uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(6);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_depositWithdraw_conservation_weth",
+        "testFuzz_lossyDeposit_weth_creditsCharge",
+        "testFuzz_lossyWithdraw_vaultDebitEqualsSent"
+      ]
+    },
+    {
+      "id": "M81",
+      "behaviour": "deposit tasks dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "RAINDEX.deposit5(token, vaultId, charged, tasks);",
+      "replacement": "RAINDEX.deposit5(token, vaultId, charged, new TaskV3[](0));",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit5_forwardsTasksToRaindex"
+      ]
+    },
+    {
+      "id": "M82",
+      "behaviour": "deposit wrong vault",
+      "file": "src/RaindexInventory.sol",
+      "target": "RAINDEX.deposit5(token, vaultId, charged, tasks);",
+      "replacement": "RAINDEX.deposit5(token, bytes32(0), charged, tasks);",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M83",
+      "behaviour": "deposit approval dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "        SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);\n",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_deposit_reentrancyBlocked",
+        "test_withdraw_forwardsEverythingReceived_overDelivery",
+        "test_withdraw_reentrancyBlocked"
+      ]
+    },
+    {
+      "id": "M84",
+      "behaviour": "zero withdraw guard dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "        if (requested == 0) revert ZeroWithdrawAmount(token, vaultId);\n",
+      "replacement": "",
+      "verdict": "KILLED",
+      "killedBy": [
+        "testFuzz_withdraw_subUnitOrZeroTarget_reverts"
+      ]
+    },
+    {
+      "id": "M70",
+      "behaviour": "withdraw task gate dropped",
+      "file": "src/RaindexInventory.sol",
+      "target": "        _onlyAdminTasks(tasks);\n        // Raindex debits the vault",
+      "replacement": "        // Raindex debits the vault",
+      "verdict": "KILLED",
+      "killedBy": [
+        "test_operatorTasks_forbidden"
+      ]
+    }
+  ],
+  "killedByNote": "killedBy lists at most the first three failing tests of each run, not every test that fails."
+}

@@ -17,6 +17,8 @@ path = [
   "PLAN.md",
   "audit/mutation-test-scans.json",
   "audit/mutation-ledger-2026-11-06.json",
+  "audit/mutation-ledger-2026-11-09-v7.json",
+  "docs/migrate-to-v7.md",
   "audit/known-issues.md",
   "audit/mutation-probe/mutants.toml",
 ]

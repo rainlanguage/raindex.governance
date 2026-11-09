@@ -68,6 +68,13 @@ Raindex V7 (`0x91b95120D085Aa99C05167f3767eB63460c1dCaC`, raindex.deploy
 `sol-v0.1.17`; a test pins its codehash); a few forwarding tests mock single
 Raindex responses. Export `BASE_RPC_URL` for the `base` RPC endpoint.
 
+## Deploy & migrate
+
+`script/Deploy.sol` (the `Deploy RaindexInventory` workflow) deploys a fresh
+inventory on the released Raindex V7. It takes only the network and the admin,
+and refuses a chain without the released V7. To move a live pool from a V6
+inventory, follow [`docs/migrate-to-v7.md`](./docs/migrate-to-v7.md).
+
 ## License
 
 [LicenseRef-DCL-1.0](./LICENSES/LicenseRef-DCL-1.0.txt) — the DecentraLicense,
