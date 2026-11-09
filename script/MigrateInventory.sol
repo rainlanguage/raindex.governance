@@ -27,12 +27,12 @@ error UnknownMigrationMode(string mode);
 /// the whole move ran on the fork and passed `verify`.
 ///
 /// After the drain landed, a normal run reverts `OldInventoryAlreadyDrained`.
-/// `MIGRATION_MODE=resume` then builds only the approve and new-inventory
-/// calls from the plan's `moved` amounts. Take them from a normal run pinned
-/// to the block before the drain (`--fork-block-number`), where the vaults
-/// were frozen. Any other `MIGRATION_MODE` value reverts. `MIGRATION_MODE=check` only
-/// checks the end state on the chain from `moved`. Run it on a fork pinned to
-/// the block of the last move transaction, before trading can change a vault.
+/// `MIGRATION_MODE=resume` then reads the amounts from the signed drain
+/// (`drainCalldata`) and builds only the approve and new-inventory calls.
+/// `MIGRATION_MODE=check` only checks the end state on the chain, from the
+/// amounts in `drainCalldata` (or in `moved` when the plan has no drain).
+/// Run it on a fork pinned to the block of the last move transaction, before
+/// trading can change a vault. Any other `MIGRATION_MODE` value reverts.
 ///
 /// Env: `MIGRATION_PLAN`, the path of a JSON file under `.tmp/` with:
 /// - `admin`: the account that holds `DEFAULT_ADMIN_ROLE` on both inventories.
@@ -43,8 +43,11 @@ error UnknownMigrationMode(string mode);
 ///   live are skipped.
 /// - `addOrderCalls`: `addOrder5` calldata for each order, built again for V7.
 /// - `revokeOperators`, `grantOperators`: addresses.
-/// - `moved` (resume and check modes): the amounts that the drain moved, as
-///   printed by the run whose calls were signed.
+/// - `moved` (check mode, when there is no `drainCalldata`): the amounts that
+///   the drain moved, as the run whose calls were signed printed them.
+/// - `drainCalldata` (resume mode, and check mode when present): the calldata that the drain delivered to
+///   the old inventory, copied from the landed transaction, never from script
+///   output.
 contract MigrateInventory is Script {
     function run() external {
         runWith(vm.envString("MIGRATION_PLAN"), vm.envOr("MIGRATION_MODE", string("")));
@@ -59,22 +62,27 @@ contract MigrateInventory is Script {
         bytes32 mode = keccak256(bytes(modeName));
 
         if (mode == keccak256("check")) {
-            LibInventoryMigration.verify(plan, vm.parseJsonUintArray(json, ".moved"));
+            // With the signed drain in the plan, its amounts are `moved`;
+            // otherwise the plan carries them.
+            bytes memory drain = _drainCalldata(json);
+            uint256[] memory checked = drain.length != 0
+                ? LibInventoryMigration.movedFromDrain(plan, drain)
+                : vm.parseJsonUintArray(json, ".moved");
+            LibInventoryMigration.verify(plan, checked);
             console2.log("check: live end state verified");
             return;
         }
         if (mode == keccak256("resume")) {
-            uint256[] memory saved = vm.parseJsonUintArray(json, ".moved");
-            AdminCall[] memory rest = LibInventoryMigration.resumeCalls(plan, saved, admin);
+            (AdminCall[] memory rest, uint256[] memory drained) =
+                LibInventoryMigration.resumeCalls(plan, admin, _drainCalldata(json));
             simulate(admin, rest);
-            LibInventoryMigration.verify(plan, saved);
+            LibInventoryMigration.verify(plan, drained);
             console2.log("simulation: end state verified");
-            console2.log("SIGN NOW, in order (resume after the drain):");
-            _printAmounts(plan, saved);
+            console2.log("SIGN NOW, in order (resume after the drain). The amounts are `moved`:");
+            _printAmounts(plan, drained);
             _printCalls(rest);
             return;
         }
-
         if (mode != keccak256("")) revert UnknownMigrationMode(modeName);
         LibInventoryMigration.checkPlan(plan);
         bool freeze = LibInventoryMigration.needsFreeze(plan);
@@ -98,6 +106,11 @@ contract MigrateInventory is Script {
         }
         _printAmounts(plan, moved);
         _printCalls(txs);
+    }
+
+    /// @dev The plan's `drainCalldata`, or empty bytes when it has none.
+    function _drainCalldata(string memory json) internal view returns (bytes memory) {
+        return vm.keyExistsJson(json, ".drainCalldata") ? vm.parseJsonBytes(json, ".drainCalldata") : bytes("");
     }
 
     function _printAmounts(MigrationPlan memory plan, uint256[] memory moved) internal pure {

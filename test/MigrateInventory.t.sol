@@ -6,6 +6,7 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Bytes} from "@openzeppelin/contracts/utils/Bytes.sol";
 import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
 import {TaskV2} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
 import {
@@ -104,8 +105,13 @@ contract MigrateInventoryTest is Test {
         (f,) = LibDecimalFloat.fromFixedDecimalLossyPacked(raw, decimals);
     }
 
-    function _planJson(uint256[] memory moved) internal returns (string memory) {
-        string memory planKey = "plan";
+    uint256 internal planCount;
+
+    /// @dev The plan JSON. `drainCalldata` is written only when `drain` is
+    /// non-empty. Each call uses a fresh serialization key, because forge
+    /// keeps the keys of an object between calls.
+    function _planJson(uint256[] memory moved, bytes memory drain) internal returns (string memory) {
+        string memory planKey = string.concat("plan", vm.toString(planCount++));
         address[] memory tokens = new address[](4);
         tokens[0] = USDC;
         tokens[1] = WETH;
@@ -135,11 +141,12 @@ contract MigrateInventoryTest is Test {
         vm.serializeBytes(planKey, "addOrderCalls", addCalls);
         vm.serializeAddress(planKey, "revokeOperators", revoke);
         vm.serializeUint(planKey, "moved", moved);
+        if (drain.length != 0) vm.serializeBytes(planKey, "drainCalldata", drain);
         return vm.serializeAddress(planKey, "grantOperators", grant);
     }
 
     function _plan() internal returns (MigrationPlan memory) {
-        return script.parsePlan(_planJson(new uint256[](0)));
+        return script.parsePlan(_planJson(new uint256[](0), ""));
     }
 
     function _freeze(MigrationPlan memory plan) internal {
@@ -208,7 +215,7 @@ contract MigrateInventoryTest is Test {
         vm.createDir("./.tmp", true);
         string memory path = "./.tmp/migration-test-plan.json";
         MigrationPlan memory plan = _plan();
-        vm.writeJson(_planJson(new uint256[](0)), path);
+        vm.writeJson(_planJson(new uint256[](0), ""), path);
 
         // Dry run from the live state: it runs the freeze and the rest.
         uint256 snapshot = vm.snapshotState();
@@ -225,7 +232,7 @@ contract MigrateInventoryTest is Test {
         assertTrue(inv.hasRole(OPERATOR_ROLE, newOperator), "new operator");
 
         // Check mode reads `moved` from the plan and checks the chain.
-        vm.writeJson(_planJson(moved), path);
+        vm.writeJson(_planJson(moved, ""), path);
         script.runWith(path, "check");
     }
 
@@ -272,60 +279,311 @@ contract MigrateInventoryTest is Test {
         harness.verify(plan, moved);
     }
 
-    // ---- after the drain: no rebuild, only resume from the saved amounts ----
+    // ---- after the drain: no rebuild, only resume from the drained amounts ----
 
-    function _drainOnly() internal returns (MigrationPlan memory plan, uint256[] memory moved) {
+    function _drainOnly() internal returns (MigrationPlan memory plan, uint256[] memory moved, bytes memory drain) {
         plan = _plan();
         _freeze(plan);
         moved = harness.amounts(plan);
-        AdminCall[] memory drain = new AdminCall[](1);
-        drain[0] = harness.calls(plan, moved)[0];
-        script.simulate(ADMIN, drain);
+        AdminCall[] memory drainCall = new AdminCall[](1);
+        drainCall[0] = harness.calls(plan, moved)[0];
+        drain = drainCall[0].data;
+        script.simulate(ADMIN, drainCall);
     }
 
     /// @dev A drained old inventory reads zero, so a rebuilt move would
     /// deposit nothing. `amounts` refuses it.
     function test_amounts_afterDrain_reverts() external {
-        (MigrationPlan memory plan,) = _drainOnly();
+        (MigrationPlan memory plan,,) = _drainOnly();
         vm.expectRevert(LibInventoryMigration.OldInventoryAlreadyDrained.selector);
         harness.amounts(plan);
     }
 
     function test_resume_afterDrain_finishesMove() external {
-        (MigrationPlan memory plan, uint256[] memory moved) = _drainOnly();
-        AdminCall[] memory rest = harness.resumeCalls(plan, moved, ADMIN);
+        (MigrationPlan memory plan, uint256[] memory moved, bytes memory drain) = _drainOnly();
+        (AdminCall[] memory rest, uint256[] memory drained) = harness.resumeCalls(plan, ADMIN, drain);
+        assertEq(drained, moved, "amounts decoded from the drain");
         assertEq(rest.length, 3, "two approves and the new multicall");
         script.simulate(ADMIN, rest);
         harness.verify(plan, moved);
     }
 
+    /// @dev Calldata that is not a drain of this plan reverts: another call,
+    /// a vault outside the plan, or a batch with an extra entry.
+    function test_movedFromDrain_notADrain_reverts() external {
+        (MigrationPlan memory plan, uint256[] memory moved, bytes memory drain) = _drainOnly();
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        harness.movedFromDrain(plan, abi.encodeCall(IERC20.approve, (address(inv), 1)));
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        harness.movedFromDrain(plan, "");
+
+        bytes[] memory foreign = new bytes[](2);
+        foreign[0] = abi.encodeCall(IRaindexV6.withdraw4, (USDC, keccak256("other"), _float(1, 6), new TaskV2[](0)));
+        foreign[1] = abi.encodeWithSignature("pause()");
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        harness.movedFromDrain(plan, abi.encodeWithSignature("multicall(bytes[])", foreign));
+
+        bytes[] memory batch = abi.decode(Bytes.slice(drain, 4), (bytes[]));
+        bytes[] memory extra = new bytes[](batch.length + 1);
+        for (uint256 i = 0; i < batch.length; i++) {
+            extra[i] = batch[i];
+        }
+        extra[batch.length] = abi.encodeWithSignature("unpause()");
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        harness.movedFromDrain(plan, abi.encodeWithSignature("multicall(bytes[])", extra));
+
+        assertEq(harness.movedFromDrain(plan, drain), moved, "the real drain decodes");
+    }
+
+    /// @dev A withdraw of a token outside the plan is rejected before any call
+    /// to that token: the token here has no code.
+    function test_movedFromDrain_foreignToken_reverts() external {
+        (MigrationPlan memory plan,,) = _drainOnly();
+        bytes[] memory foreign = new bytes[](2);
+        foreign[0] =
+            abi.encodeCall(IRaindexV6.withdraw4, (makeAddr("notAToken"), USDC_VAULT, _float(1, 6), new TaskV2[](0)));
+        foreign[1] = abi.encodeWithSignature("pause()");
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        harness.movedFromDrain(plan, abi.encodeWithSignature("multicall(bytes[])", foreign));
+
+        // A plan with no vaults rejects any withdraw.
+        plan.tokens = new address[](0);
+        plan.vaultIds = new bytes32[](0);
+        foreign[0] = abi.encodeCall(IRaindexV6.withdraw4, (USDC, USDC_VAULT, _float(1, 6), new TaskV2[](0)));
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        harness.movedFromDrain(plan, abi.encodeWithSignature("multicall(bytes[])", foreign));
+    }
+
+    /// @dev A batch whose last entry ends on a data byte, not on padding, is
+    /// decoded in full and rejected as not a drain.
+    function test_movedFromDrain_unpaddedTail_reverts() external {
+        (MigrationPlan memory plan,,) = _drainOnly();
+        bytes[] memory batch = new bytes[](1);
+        batch[0] = abi.encodePacked(bytes32(uint256(1)));
+        bytes memory input = abi.encodeWithSignature("multicall(bytes[])", batch);
+        assertEq(uint8(input[input.length - 1]), 1, "ends on a data byte");
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        harness.movedFromDrain(plan, input);
+    }
+
+    /// @dev After a funded move finished, a rerun refuses, even when the
+    /// admin holds spare funds of every token.
+    function test_resume_afterFundedFinish_reverts() external {
+        (MigrationPlan memory plan,, bytes memory drain) = _drainOnly();
+        (AdminCall[] memory rest,) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        deal(USDC, ADMIN, 1e12);
+        deal(WETH, ADMIN, 100 ether);
+        vm.expectRevert(LibInventoryMigration.MoveAlreadyLanded.selector);
+        harness.resumeCalls(plan, ADMIN, drain);
+    }
+
+    /// @dev Resume mode checks the simulated end state before it prints calls
+    /// to sign: an old operator granted again after the drain fails it.
+    function test_run_resumeMode_verifiesEndState() external {
+        vm.createDir("./.tmp", true);
+        string memory path = "./.tmp/migration-test-resume-verify.json";
+        (, uint256[] memory moved, bytes memory drain) = _drainOnly();
+        vm.writeJson(_planJson(moved, drain), path);
+        vm.prank(ADMIN);
+        IAccessControl(OLD).grantRole(OPERATOR_ROLE, OLD_OPERATOR_A);
+        vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.OperatorStillOnOld.selector, OLD_OPERATOR_A));
+        script.runWith(path, "resume");
+    }
+
     function test_resume_notDrained_reverts() external {
         MigrationPlan memory plan = _plan();
         _freeze(plan);
-        uint256[] memory moved = harness.amounts(plan);
+        bytes memory drain = harness.calls(plan, harness.amounts(plan))[0].data;
         vm.expectRevert(LibInventoryMigration.OldInventoryNotDrained.selector);
-        harness.resumeCalls(plan, moved, ADMIN);
+        harness.resumeCalls(plan, ADMIN, drain);
     }
 
-    function test_resume_movedLengthMismatch_reverts() external {
-        (MigrationPlan memory plan,) = _drainOnly();
-        vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.MovedLengthMismatch.selector, 4, 1));
-        harness.resumeCalls(plan, new uint256[](1), ADMIN);
+    function test_resume_pausedWithFunds_reverts() external {
+        MigrationPlan memory plan = _plan();
+        _freeze(plan);
+        uint256[] memory moved = harness.amounts(plan);
+        bytes memory drain = harness.calls(plan, moved)[0].data;
+        vm.prank(ADMIN);
+        RaindexInventory(OLD).pause();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LibInventoryMigration.OldInventoryPausedWithFunds.selector, USDC, USDC_VAULT, moved[0]
+            )
+        );
+        harness.resumeCalls(plan, ADMIN, drain);
     }
 
-    function test_resume_allZero_reverts() external {
-        (MigrationPlan memory plan,) = _drainOnly();
+    /// @dev A drain that left one raw unit in the last vault is not a full
+    /// drain: resume names that vault and the amount left.
+    function test_resume_lastVaultNotDrained_reverts() external {
+        MigrationPlan memory plan = _plan();
+        _freeze(plan);
+        uint256[] memory moved = harness.amounts(plan);
+        uint256 last = moved.length - 1;
+        moved[last] -= 1;
+        AdminCall[] memory drainCall = new AdminCall[](1);
+        drainCall[0] = harness.calls(plan, moved)[0];
+        script.simulate(ADMIN, drainCall);
+        vm.expectRevert(
+            abi.encodeWithSelector(LibInventoryMigration.OldInventoryPausedWithFunds.selector, USDC, USDC_VAULT_2, 1)
+        );
+        harness.resumeCalls(plan, ADMIN, drainCall[0].data);
+    }
+
+    /// @dev Drains one empty vault (a pause-only drain) for a plan with or
+    /// without orders and grants.
+    function _pauseOnlyDrain(bool withOrders, bool withGrants)
+        internal
+        returns (MigrationPlan memory plan, bytes memory drain)
+    {
+        plan = _plan();
+        plan.tokens = new address[](1);
+        plan.tokens[0] = USDC;
+        plan.vaultIds = new bytes32[](1);
+        plan.vaultIds[0] = EMPTY_VAULT;
+        if (!withOrders) plan.addOrderCalls = new bytes[](0);
+        if (!withGrants) plan.grantOperators = new address[](0);
+        _freeze(plan);
+        AdminCall[] memory drainCall = new AdminCall[](1);
+        drainCall[0] = harness.calls(plan, harness.amounts(plan))[0];
+        script.simulate(ADMIN, drainCall);
+        drain = drainCall[0].data;
+    }
+
+    function test_resume_nothingOpen_reverts() external {
+        (MigrationPlan memory plan, bytes memory drain) = _pauseOnlyDrain(false, false);
         vm.expectRevert(LibInventoryMigration.NothingToResume.selector);
-        harness.resumeCalls(plan, new uint256[](4), ADMIN);
+        harness.resumeCalls(plan, ADMIN, drain);
     }
 
-    /// @dev An amount copied too high is caught: the admin does not hold it.
-    function test_resume_amountTooHigh_reverts() external {
-        (MigrationPlan memory plan, uint256[] memory moved) = _drainOnly();
-        uint256 held = IERC20(WETH).balanceOf(ADMIN);
-        moved[1] = held + 1;
-        vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.AdminBalanceShort.selector, WETH, held + 1, held));
-        harness.resumeCalls(plan, moved, ADMIN);
+    function test_resume_ordersOnly_finishesMove() external {
+        (MigrationPlan memory plan, bytes memory drain) = _pauseOnlyDrain(true, false);
+        (AdminCall[] memory rest, uint256[] memory moved) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        harness.verify(plan, moved);
+    }
+
+    function test_resume_grantsOnly_finishesMove() external {
+        (MigrationPlan memory plan, bytes memory drain) = _pauseOnlyDrain(false, true);
+        (AdminCall[] memory rest, uint256[] memory moved) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        harness.verify(plan, moved);
+    }
+
+    /// @dev Funds alone, with no orders and no grants, still resume.
+    function test_resume_fundsOnly_finishesMove() external {
+        (MigrationPlan memory plan,, bytes memory drain) = _drainOnly();
+        plan.addOrderCalls = new bytes[](0);
+        plan.grantOperators = new address[](0);
+        (AdminCall[] memory rest, uint256[] memory moved) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        harness.verify(plan, moved);
+    }
+
+    /// @dev A live V7 plan order alone shows the move landed.
+    function test_resume_orderLanded_reverts() external {
+        (MigrationPlan memory plan, bytes memory drain) = _pauseOnlyDrain(true, false);
+        (AdminCall[] memory rest,) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        vm.expectRevert(LibInventoryMigration.MoveAlreadyLanded.selector);
+        harness.resumeCalls(plan, ADMIN, drain);
+    }
+
+    /// @dev A granted plan operator alone shows the move landed.
+    function test_resume_grantLanded_reverts() external {
+        (MigrationPlan memory plan, bytes memory drain) = _pauseOnlyDrain(false, true);
+        (AdminCall[] memory rest,) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        vm.expectRevert(LibInventoryMigration.MoveAlreadyLanded.selector);
+        harness.resumeCalls(plan, ADMIN, drain);
+    }
+
+    /// @dev A plan whose only work is one funded vault resumes. It cannot show
+    /// that it landed, so a rerun builds a second deposit, and `verify` fails
+    /// on it.
+    function test_resume_singleFundedVault_finishesMove() external {
+        MigrationPlan memory plan = _plan();
+        plan.tokens = new address[](1);
+        plan.tokens[0] = USDC;
+        plan.vaultIds = new bytes32[](1);
+        plan.vaultIds[0] = USDC_VAULT_2;
+        plan.addOrderCalls = new bytes[](0);
+        plan.grantOperators = new address[](0);
+        _freeze(plan);
+        AdminCall[] memory drainCall = new AdminCall[](1);
+        drainCall[0] = harness.calls(plan, harness.amounts(plan))[0];
+        script.simulate(ADMIN, drainCall);
+
+        (AdminCall[] memory rest, uint256[] memory moved) = harness.resumeCalls(plan, ADMIN, drainCall[0].data);
+        assertEq(moved[0], USDC_2_AMOUNT, "drained amount");
+        assertEq(rest.length, 2, "approve and new multicall");
+        script.simulate(ADMIN, rest);
+        harness.verify(plan, moved);
+
+        deal(USDC, ADMIN, IERC20(USDC).balanceOf(ADMIN) + USDC_2_AMOUNT);
+        (rest,) = harness.resumeCalls(plan, ADMIN, drainCall[0].data);
+        script.simulate(ADMIN, rest);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LibInventoryMigration.VaultNotMoved.selector, USDC, USDC_VAULT_2, USDC_2_AMOUNT, 2 * USDC_2_AMOUNT
+            )
+        );
+        harness.verify(plan, moved);
+    }
+
+    /// @dev Trading that empties a V7 vault after the move does not reopen it.
+    function test_resume_emptiedVaultAfterFinish_reverts() external {
+        (MigrationPlan memory plan,, bytes memory drain) = _drainOnly();
+        (AdminCall[] memory rest, uint256[] memory moved) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        vm.prank(newOperator);
+        inv.withdraw5(WETH, WETH_VAULT, _float(moved[1], 18), new TaskV3[](0));
+        vm.expectRevert(LibInventoryMigration.MoveAlreadyLanded.selector);
+        harness.resumeCalls(plan, ADMIN, drain);
+    }
+
+    /// @dev Check mode takes the amounts from the signed drain when the plan
+    /// has it.
+    function test_run_checkMode_readsDrain() external {
+        vm.createDir("./.tmp", true);
+        string memory path = "./.tmp/migration-test-check.json";
+        (MigrationPlan memory plan,, bytes memory drain) = _drainOnly();
+        (AdminCall[] memory rest,) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        vm.writeJson(_planJson(new uint256[](0), drain), path);
+        script.runWith(path, "check");
+    }
+
+    /// @dev Without `drainCalldata`, check mode uses the plan's `moved`.
+    function test_run_checkMode_readsMovedWithoutDrain() external {
+        vm.createDir("./.tmp", true);
+        string memory path = "./.tmp/migration-test-check-moved.json";
+        (MigrationPlan memory plan, uint256[] memory moved, bytes memory drain) = _drainOnly();
+        (AdminCall[] memory rest,) = harness.resumeCalls(plan, ADMIN, drain);
+        script.simulate(ADMIN, rest);
+        vm.writeJson(_planJson(moved, ""), path);
+        script.runWith(path, "check");
+        moved[1] += 1;
+        vm.writeJson(_planJson(moved, ""), path);
+        vm.expectRevert(
+            abi.encodeWithSelector(LibInventoryMigration.VaultNotMoved.selector, WETH, WETH_VAULT, moved[1], 3 ether)
+        );
+        script.runWith(path, "check");
+    }
+
+    function test_resume_adminSpentFunds_reverts() external {
+        (MigrationPlan memory plan, uint256[] memory moved, bytes memory drain) = _drainOnly();
+        uint256 usdcTotal = moved[0] + moved[2] + moved[3];
+        deal(USDC, ADMIN, usdcTotal - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(LibInventoryMigration.AdminBalanceShort.selector, USDC, usdcTotal, usdcTotal - 1)
+        );
+        harness.resumeCalls(plan, ADMIN, drain);
+        deal(USDC, ADMIN, usdcTotal);
+        deal(WETH, ADMIN, 0);
+        vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.AdminBalanceShort.selector, WETH, 3 ether, 0));
+        harness.resumeCalls(plan, ADMIN, drain);
     }
 
     /// @dev Pausing the old inventory with funds in it is not a drain.
@@ -343,22 +601,28 @@ contract MigrateInventoryTest is Test {
     function test_run_unknownMode_reverts() external {
         vm.createDir("./.tmp", true);
         string memory path = "./.tmp/migration-test-mode.json";
-        vm.writeJson(_planJson(new uint256[](0)), path);
+        vm.writeJson(_planJson(new uint256[](0), ""), path);
         vm.expectRevert(abi.encodeWithSelector(UnknownMigrationMode.selector, "chek"));
         script.runWith(path, "chek");
     }
 
     /// @dev `run` after the drain refuses to rebuild, and resume mode
-    /// finishes the move from the saved amounts.
+    /// finishes the move from the signed drain.
     function test_run_afterDrain_resumeMode() external {
         vm.createDir("./.tmp", true);
         string memory path = "./.tmp/migration-test-resume.json";
-        (, uint256[] memory moved) = _drainOnly();
-        vm.writeJson(_planJson(moved), path);
+        (, uint256[] memory moved, bytes memory drain) = _drainOnly();
+        vm.writeJson(_planJson(moved, drain), path);
 
         vm.expectRevert(LibInventoryMigration.OldInventoryAlreadyDrained.selector);
         script.runWith(path, "");
 
+        // A plan without the real drain input fails closed.
+        vm.writeJson(_planJson(moved, ""), path);
+        vm.expectRevert(LibInventoryMigration.NotADrain.selector);
+        script.runWith(path, "resume");
+
+        vm.writeJson(_planJson(moved, drain), path);
         script.runWith(path, "resume");
         assertEq(LibInventoryMigration.rawVaultBalance(address(inv), WETH, WETH_VAULT), 3 ether, "WETH on V7");
     }
@@ -411,6 +675,27 @@ contract MigrateInventoryTest is Test {
         harness.amounts(plan);
     }
 
+    /// @dev A plan operator granted on V7, or a plan order live on V7, before
+    /// the move would make resume read the move as landed, so the normal run
+    /// refuses it.
+    function test_amounts_newInventoryNotFresh_reverts() external {
+        MigrationPlan memory plan = _plan();
+        uint256 snapshot = vm.snapshotState();
+        vm.prank(ADMIN);
+        inv.grantRole(OPERATOR_ROLE, newOperator);
+        vm.expectRevert(LibInventoryMigration.NewInventoryNotFresh.selector);
+        harness.amounts(plan);
+
+        vm.revertToState(snapshot);
+        (bool ok,) = address(inv).call(plan.addOrderCalls[0]);
+        assertFalse(ok, "only the admin adds orders");
+        vm.prank(ADMIN);
+        (ok,) = address(inv).call(plan.addOrderCalls[0]);
+        assertTrue(ok, "admin adds the order early");
+        vm.expectRevert(LibInventoryMigration.NewInventoryNotFresh.selector);
+        harness.amounts(plan);
+    }
+
     function test_amounts_vaultLengthMismatch_reverts() external {
         MigrationPlan memory plan = _plan();
         plan.vaultIds = new bytes32[](1);
@@ -438,10 +723,14 @@ contract MigrateInventoryTest is Test {
         harness.amounts(plan);
     }
 
+    /// @dev A plan entry that is not `addOrder5` calldata fails before any
+    /// call is built: in `amounts` and in `calls` alike.
     function test_calls_notAddOrder5_reverts() external {
         MigrationPlan memory plan = _plan();
-        plan.addOrderCalls[0] = abi.encodeCall(IRaindexV6.addOrder4, (config, new TaskV2[](0)));
         uint256[] memory moved = harness.amounts(plan);
+        plan.addOrderCalls[0] = abi.encodeCall(IRaindexV6.addOrder4, (config, new TaskV2[](0)));
+        vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.NotAddOrder5Call.selector, 0));
+        harness.amounts(plan);
         vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.NotAddOrder5Call.selector, 0));
         harness.calls(plan, moved);
     }
