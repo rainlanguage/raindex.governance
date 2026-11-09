@@ -4,8 +4,7 @@ pragma solidity =0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
-import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
-import {TaskV2} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+import {IRaindexV7, TaskV3} from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -13,13 +12,14 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /// @notice Fork tests against the EXACT deployed Raindex on Base mainnet. Every
-/// deposit/withdraw hits the live OrderBook at 0xe522…; the operator path is
+/// deposit/withdraw hits the live OrderBook at 0x91b9… (V7); the operator path is
 /// exercised by an address granted `OPERATOR_ROLE`. No mock Raindex — the Float
 /// conversions, approvals and vault accounting are all real.
 contract RaindexInventoryForkTest is Test {
     using LibDecimalFloat for Float;
 
-    IRaindexV6 internal constant RAINDEX = IRaindexV6(0xe522cB4a5fCb2eb31a52Ff41a4653d85A4fd7C9D);
+    IRaindexV7 internal constant RAINDEX = IRaindexV7(0x91b95120D085Aa99C05167f3767eB63460c1dCaC);
+    bytes32 internal constant RAINDEX_V7_CODEHASH = 0x68d6223023b2516f30acb5b6d4973cbaf5054e9d6156d27c51180939ba233cf5;
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // 6 decimals
 
     bytes32 internal constant VAULT = bytes32(uint256(1));
@@ -50,7 +50,7 @@ contract RaindexInventoryForkTest is Test {
     /// @dev Pure on purpose: USDC is 6 dp, hardcoded so this makes NO external
     /// `decimals()` call. If it did, evaluating it as an argument right after a
     /// single-shot `vm.prank` would consume the prank and the real
-    /// deposit4/withdraw4 would run unpranked.
+    /// deposit5/withdraw5 would run unpranked.
     function _float(
         address,
         /*token*/
@@ -68,7 +68,7 @@ contract RaindexInventoryForkTest is Test {
         deal(token, who, amount);
         vm.startPrank(who);
         IERC20(token).approve(address(inv), amount);
-        inv.deposit4(token, vaultId, _float(token, amount), new TaskV2[](0));
+        inv.deposit5(token, vaultId, _float(token, amount), new TaskV3[](0));
         vm.stopPrank();
     }
 
@@ -77,6 +77,12 @@ contract RaindexInventoryForkTest is Test {
     function test_realContractsHaveCode() external view {
         assertGt(address(RAINDEX).code.length, 0, "Raindex has no code");
         assertGt(USDC.code.length, 0, "USDC has no code");
+    }
+
+    /// @dev The fork runs against the released Raindex V7, not any contract
+    /// at that address: raindex.deploy sol-v0.1.17 `RaindexV7.BYTECODE_HASH`.
+    function test_raindexIsReleasedV7() external view {
+        assertEq(address(RAINDEX).codehash, RAINDEX_V7_CODEHASH, "Raindex is not the released V7");
     }
 
     // ---- admin manages funds; funds flow to / from the caller ----
@@ -88,7 +94,7 @@ contract RaindexInventoryForkTest is Test {
 
         uint256 adminBefore = IERC20(USDC).balanceOf(admin);
         vm.prank(admin);
-        inv.withdraw4(USDC, VAULT, _float(USDC, amount / 2), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, amount / 2), new TaskV3[](0));
         assertEq(IERC20(USDC).balanceOf(admin) - adminBefore, amount / 2, "admin (caller) receives withdrawn USDC");
         assertEq(_vaultRaw(USDC, VAULT), amount / 2, "vault halved");
     }
@@ -101,7 +107,7 @@ contract RaindexInventoryForkTest is Test {
 
         uint256 opBefore = IERC20(USDC).balanceOf(operator);
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(USDC, amount), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, amount), new TaskV3[](0));
 
         assertEq(IERC20(USDC).balanceOf(operator) - opBefore, amount, "operator (caller) receives the funds");
         assertEq(_vaultRaw(USDC, VAULT), 0, "vault drained by the operator draw");
@@ -112,7 +118,7 @@ contract RaindexInventoryForkTest is Test {
         deal(USDC, operator, amount);
         vm.startPrank(operator);
         IERC20(USDC).approve(address(inv), amount);
-        inv.deposit4(USDC, VAULT, _float(USDC, amount), new TaskV2[](0));
+        inv.deposit5(USDC, VAULT, _float(USDC, amount), new TaskV3[](0));
         vm.stopPrank();
 
         assertEq(IERC20(USDC).balanceOf(operator), 0, "operator funds swept into vault");
@@ -125,14 +131,14 @@ contract RaindexInventoryForkTest is Test {
 
         // draw out (e.g. to fund a fill the operator settles elsewhere)
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(USDC, amount), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, amount), new TaskV3[](0));
         assertEq(_vaultRaw(USDC, VAULT), 0, "vault emptied");
         assertEq(IERC20(USDC).balanceOf(operator), amount, "operator holds the draw");
 
         // return proceeds (same token, clean numeric check)
         vm.startPrank(operator);
         IERC20(USDC).approve(address(inv), amount);
-        inv.deposit4(USDC, VAULT, _float(USDC, amount), new TaskV2[](0));
+        inv.deposit5(USDC, VAULT, _float(USDC, amount), new TaskV3[](0));
         vm.stopPrank();
         assertEq(_vaultRaw(USDC, VAULT), amount, "vault refilled");
         assertEq(IERC20(USDC).balanceOf(operator), 0, "operator nets ~zero across the loop");
@@ -144,7 +150,7 @@ contract RaindexInventoryForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(RaindexInventory.InsufficientVaultLiquidity.selector, USDC, 500e6, 100e6)
         );
-        inv.withdraw4(USDC, VAULT, _float(USDC, 500e6), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, 500e6), new TaskV3[](0));
     }
 
     // ---- access control ----
@@ -156,7 +162,7 @@ contract RaindexInventoryForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, OPERATOR_ROLE)
         );
-        inv.withdraw4(USDC, VAULT, _float(USDC, 100e6), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, 100e6), new TaskV3[](0));
     }
 
     function test_unauthorized_cannotDeposit() external {
@@ -167,18 +173,18 @@ contract RaindexInventoryForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, OPERATOR_ROLE)
         );
-        inv.deposit4(USDC, VAULT, _float(USDC, 100e6), new TaskV2[](0));
+        inv.deposit5(USDC, VAULT, _float(USDC, 100e6), new TaskV3[](0));
         vm.stopPrank();
     }
 
     function test_orderManagement_onlyAdmin() external {
-        // entask2 is admin-gated; a non-admin (even an operator) is rejected
+        // entask3 is admin-gated; a non-admin (even an operator) is rejected
         // before the Raindex call.
         vm.prank(operator);
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, operator, ADMIN_ROLE)
         );
-        inv.entask2(new TaskV2[](0));
+        inv.entask3(new TaskV3[](0));
     }
 
     function test_operatorRole_grantAndRevoke() external {
@@ -190,13 +196,13 @@ contract RaindexInventoryForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, op2, OPERATOR_ROLE)
         );
-        inv.withdraw4(USDC, VAULT, _float(USDC, 100e6), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, 100e6), new TaskV3[](0));
 
         // admin grants -> works
         vm.prank(admin);
         inv.grantRole(OPERATOR_ROLE, op2);
         vm.prank(op2);
-        inv.withdraw4(USDC, VAULT, _float(USDC, 100e6), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, 100e6), new TaskV3[](0));
         assertEq(IERC20(USDC).balanceOf(op2), 100e6, "granted operator can draw");
 
         // admin revokes -> rejected again
@@ -206,7 +212,7 @@ contract RaindexInventoryForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, op2, OPERATOR_ROLE)
         );
-        inv.withdraw4(USDC, VAULT, _float(USDC, 100e6), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, 100e6), new TaskV3[](0));
     }
 
     function test_nonAdmin_cannotGrantOperator() external {
@@ -227,7 +233,7 @@ contract RaindexInventoryForkTest is Test {
 
         vm.prank(operator);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        inv.withdraw4(USDC, VAULT, _float(USDC, 100e6), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, 100e6), new TaskV3[](0));
     }
 
     function test_pause_onlyAdmin() external {
@@ -246,8 +252,8 @@ contract RaindexInventoryForkTest is Test {
         uint256 b = 400e6;
         deal(USDC, admin, a + b);
         bytes[] memory calls = new bytes[](2);
-        calls[0] = abi.encodeCall(RaindexInventory.deposit4, (USDC, VAULT, _float(USDC, a), new TaskV2[](0)));
-        calls[1] = abi.encodeCall(RaindexInventory.deposit4, (USDC, vault2, _float(USDC, b), new TaskV2[](0)));
+        calls[0] = abi.encodeCall(RaindexInventory.deposit5, (USDC, VAULT, _float(USDC, a), new TaskV3[](0)));
+        calls[1] = abi.encodeCall(RaindexInventory.deposit5, (USDC, vault2, _float(USDC, b), new TaskV3[](0)));
 
         vm.startPrank(admin);
         IERC20(USDC).approve(address(inv), a + b);
@@ -259,10 +265,10 @@ contract RaindexInventoryForkTest is Test {
     }
 
     function test_multicall_preservesGate() external {
-        // A stranger calling multicall([deposit4]) must still revert — the role
+        // A stranger calling multicall([deposit5]) must still revert — the role
         // gate is enforced on the inner delegatecall, not bypassed.
         bytes[] memory calls = new bytes[](1);
-        calls[0] = abi.encodeCall(RaindexInventory.deposit4, (USDC, VAULT, _float(USDC, 1e6), new TaskV2[](0)));
+        calls[0] = abi.encodeCall(RaindexInventory.deposit5, (USDC, VAULT, _float(USDC, 1e6), new TaskV3[](0)));
         address stranger = makeAddr("stranger");
         vm.prank(stranger);
         vm.expectRevert(
@@ -284,7 +290,7 @@ contract RaindexInventoryForkTest is Test {
     function test_deposit_lossyFloat_chargesRoundedUp_noPoolDip() external {
         // A sub-precision Float (1.0000005 USDC, needs 7 dp) is LOSSY at USDC's 6
         // dp. Raindex.pullTokens rounds the truncation UP (pulls 1.000001 from
-        // us), so deposit4 must charge the caller the same rounded-UP amount. If
+        // us), so deposit5 must charge the caller the same rounded-UP amount. If
         // it charged the round-DOWN amount (the pre-fix bug), Raindex would try
         // to pull 1 unit more than we received — dipping into the contract's own
         // balance (the shared pool) or, with no free balance, reverting.
@@ -293,7 +299,7 @@ contract RaindexInventoryForkTest is Test {
         deal(USDC, operator, roundedUp);
         vm.startPrank(operator);
         IERC20(USDC).approve(address(inv), roundedUp);
-        inv.deposit4(USDC, VAULT, f, new TaskV2[](0)); // pre-fix: reverts here
+        inv.deposit5(USDC, VAULT, f, new TaskV3[](0)); // pre-fix: reverts here
         vm.stopPrank();
         // Caller was charged the rounded-UP amount (its whole balance), so
         // Raindex's round-up pull is fully funded and the pool is never touched.
@@ -304,7 +310,7 @@ contract RaindexInventoryForkTest is Test {
         assertEq(vault18, roundedUp * 1e12, "vault credited exactly the charge");
         assertEq(IERC20(USDC).allowance(address(inv), address(RAINDEX)), 0, "no allowance left to Raindex");
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(USDC, roundedUp), new TaskV2[](0));
+        inv.withdraw5(USDC, VAULT, _float(USDC, roundedUp), new TaskV3[](0));
         assertEq(IERC20(USDC).balanceOf(operator), roundedUp, "full charge recoverable");
     }
 }

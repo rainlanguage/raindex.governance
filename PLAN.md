@@ -16,16 +16,16 @@ One contract, `RaindexInventory`, is the single owner of the orders/vaults.
 Everything else is access control:
 
 - **`DEFAULT_ADMIN_ROLE`** owns and manages the orders/vaults. It calls the
-  drop-in `IRaindexV6` management methods (`addOrder4`, `removeOrder3`,
-  `entask2`, …) _through_ the inventory, so existing Raindex tooling — including
+  drop-in `IRaindexV7` management methods (`addOrder5`, `removeOrder4`,
+  `entask3`, …) _through_ the inventory, so existing Raindex tooling — including
   the CLI's `multicall([...])` output — works by pointing at the inventory
   address.
-- **`OPERATOR_ROLE`** moves inventory. Operators call the same `deposit4` /
-  `withdraw4` signatures; funds flow **to / from the caller**:
+- **`OPERATOR_ROLE`** moves inventory. Operators call the same `deposit5` /
+  `withdraw5` signatures; funds flow **to / from the caller**:
 
   ```
-  withdraw4:  vault → inventory → msg.sender
-  deposit4:   msg.sender → inventory → vault
+  withdraw5:  vault → inventory → msg.sender
+  deposit5:   msg.sender → inventory → vault
   ```
 
 The inventory knows nothing about _why_ an operator wants the funds. Each
@@ -49,7 +49,7 @@ arbitrary address chosen per-call.
 
 Multiple operators can be pointed at the same vaults — that's the point, maximal
 capital efficiency. If two operators race to draw a vault that can't cover both
-in one block, the second `withdraw4` measures a short balance delta and reverts
+in one block, the second `withdraw5` measures a short balance delta and reverts
 `InsufficientVaultLiquidity`. Atomicity makes this safe: a consumer that draws
 and settles in one transaction either gets the full amount or the whole thing
 reverts and it retries. No partial fills, no over-draw.
@@ -60,10 +60,10 @@ reverts and it retries. No partial fills, no over-draw.
   balance to itself, so it is only ever granted to audited contracts and is
   admin-grantable/revocable. Production should point `DEFAULT_ADMIN_ROLE` at a
   multisig, optionally behind a timelock.
-- **`pause()`** makes `deposit4` / `withdraw4` revert while leaving order
+- **`pause()`** makes `deposit5` / `withdraw5` revert while leaving order
   management open. Live orders keep clearing on Raindex, so the admin must also
   cancel them during an incident. `rescue` is not pause-gated.
-- `nonReentrant` guards `deposit4` / `withdraw4`; `deposit4` approves exactly
+- `nonReentrant` guards `deposit5` / `withdraw5`; `deposit5` approves exactly
   the amount it deposits to Raindex. The guard is Multicall-safe because batched
   calls execute sequentially (each acquires/releases), not nested.
 
@@ -83,6 +83,7 @@ This is a deliberate, supervised migration, not a hot swap.
 
 ## Status
 
-`RaindexInventory` + fork tests (against the live Base Raindex; a few forwarding
-tests mock single responses) are in this repo and green. Consumers live in their
-own repositories and depend on this one; nothing consumer-specific belongs here.
+`RaindexInventory` + fork tests (against the live Base Raindex V7; a few
+forwarding tests mock single responses) are in this repo and green. Consumers
+live in their own repositories and depend on this one; nothing consumer-specific
+belongs here.

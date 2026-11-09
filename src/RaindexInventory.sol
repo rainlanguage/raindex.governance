@@ -11,13 +11,13 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
 import {
+    IRaindexV7,
     OrderConfigV4,
     OrderV4,
-    TaskV2,
-    QuoteV2
-} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+    TaskV3,
+    QuoteV3
+} from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 
 /// @title RaindexInventory
@@ -31,14 +31,14 @@ import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalF
 ///    `msg.sender` to Raindex, it is the canonical owner of every order and
 ///    vault placed through it (Raindex forbids delegated order management). The
 ///    admin manages those orders/vaults *through* this contract using the exact
-///    same `IRaindexV6` signatures it would call on Raindex directly, so
+///    same `IRaindexV7` signatures it would call on Raindex directly, so
 ///    existing Raindex tooling works by pointing at this address. `Multicall` is
-///    inherited so a Raindex CLI `multicall([addOrder4, ...])` lands here
+///    inherited so a Raindex CLI `multicall([addOrder5, ...])` lands here
 ///    unchanged (delegatecall to self preserves `msg.sender`, so the admin gate
 ///    still applies).
 ///
 /// 2. **Inventory operator** (`OPERATOR_ROLE`). Any address holding this role may
-///    move funds in and out of the owned vaults via [`deposit4`] / [`withdraw4`].
+///    move funds in and out of the owned vaults via [`deposit5`] / [`withdraw5`].
 ///    Funds always flow to / from the *caller*: a withdraw pulls the token out of
 ///    the vault into this contract and forwards it to `msg.sender`; a deposit
 ///    pulls the token from `msg.sender` into this contract and deposits it into
@@ -51,11 +51,11 @@ import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalF
 /// The trust boundary is `OPERATOR_ROLE`: an operator can withdraw a vault's
 /// balance to itself, so the role is only ever granted to audited contracts and
 /// stays admin-grantable/revocable. [`pause`] is the kill switch: while paused,
-/// [`deposit4`] and [`withdraw4`] revert `EnforcedPause` for the admin and every
+/// [`deposit5`] and [`withdraw5`] revert `EnforcedPause` for the admin and every
 /// operator (a caller without a role still fails the role check first), so no
 /// vault capital moves through this contract. Pause does NOT touch Raindex: the
 /// orders this contract owns stay live and keep clearing against its vaults,
-/// so incident response must also [`removeOrder3`] each live order. Order
+/// so incident response must also [`removeOrder4`] each live order. Order
 /// management stays available for that reason. [`rescue`] is deliberately
 /// *not* pause-gated: it only moves stray balances held by this contract, never
 /// vault capital (that lives in Raindex), and must stay available for incident
@@ -63,14 +63,14 @@ import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalF
 contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall {
     using LibDecimalFloat for Float;
 
-    /// @notice Role allowed to [`deposit4`] / [`withdraw4`] against the owned
+    /// @notice Role allowed to [`deposit5`] / [`withdraw5`] against the owned
     /// vaults. Its admin is `DEFAULT_ADMIN_ROLE`.
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     /// @notice The deployed Raindex (OrderBook) this contract owns orders in.
-    IRaindexV6 public immutable RAINDEX;
+    IRaindexV7 public immutable RAINDEX;
 
-    /// @notice A [`withdraw4`] forwarded a nonzero `amount` of `token` to the
+    /// @notice A [`withdraw5`] forwarded a nonzero `amount` of `token` to the
     /// caller. `amount` is what this contract received from Raindex for
     /// `vaultId`, which can differ from the vault debit (for example a token
     /// that over-delivers on transfer).
@@ -81,7 +81,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// the measured balance delta, not the request.
     event OperatorWithdraw(address indexed operator, address indexed token, bytes32 indexed vaultId, uint256 amount);
 
-    /// @notice A [`deposit4`] settled: `amount` raw units of `token` were
+    /// @notice A [`deposit5`] settled: `amount` raw units of `token` were
     /// pulled from the caller and credited to `vaultId`. For a lossy Float
     /// `amount` is the rounded-up charge, and the vault is credited exactly it.
     /// @param operator The caller (admin or operator) the funds were pulled from.
@@ -94,7 +94,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @notice A constructor argument that must be nonzero was zero.
     error ZeroAddress();
 
-    /// @notice A [`withdraw4`] could not be covered in full by the vault, so
+    /// @notice A [`withdraw5`] could not be covered in full by the vault, so
     /// the whole call reverted rather than short-filling the caller.
     /// @param token The token requested.
     /// @param requested The raw amount the target Float floors to at the
@@ -103,7 +103,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// measured balance delta).
     error InsufficientVaultLiquidity(address token, uint256 requested, uint256 received);
 
-    /// @notice A [`withdraw4`] target floors to zero raw units at the token's
+    /// @notice A [`withdraw5`] target floors to zero raw units at the token's
     /// decimals, so there is nothing to withdraw.
     /// @param token The token requested.
     /// @param vaultId The Raindex vault named.
@@ -127,7 +127,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         }
     }
 
-    function _onlyAdminTasks(TaskV2[] calldata tasks) internal view {
+    function _onlyAdminTasks(TaskV3[] calldata tasks) internal view {
         if (tasks.length != 0 && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert OperatorTasksForbidden();
     }
 
@@ -135,7 +135,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// grants, pause and rescue. MUST be nonzero.
     /// @param raindex_ The deployed Raindex (OrderBook) this contract owns its
     /// orders and vaults in. MUST be nonzero. Immutable thereafter.
-    constructor(address admin_, IRaindexV6 raindex_) {
+    constructor(address admin_, IRaindexV7 raindex_) {
         if (admin_ == address(0) || address(raindex_) == address(0)) revert ZeroAddress();
         RAINDEX = raindex_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
@@ -149,7 +149,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// decimals, from `vaultId` and forward everything received to the caller. Reverts if the vault could not
     /// cover the request (e.g. a concurrent Raindex clear drained it first), so a
     /// caller settling atomically never receives a short fill.
-    /// @dev Drop-in `IRaindexV6.withdraw4` signature. The amount actually
+    /// @dev Drop-in `IRaindexV7.withdraw5` signature. The amount actually
     /// withdrawn is measured by balance delta (Raindex withdraws `min(target,
     /// vault balance)`), then forwarded to `msg.sender`. `targetAmount` is
     /// floored to the token's decimals before being handed to Raindex, so the
@@ -161,11 +161,11 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @param tasks Forwarded verbatim to Raindex to run after the withdraw.
     /// Admin only: a non-empty array from an operator reverts
     /// `OperatorTasksForbidden`.
-    // The balance-delta reads around `RAINDEX.withdraw4` are how we measure the
+    // The balance-delta reads around `RAINDEX.withdraw5` are how we measure the
     // actually-withdrawn amount; the function is `nonReentrant` so the external
     // call cannot re-enter.
     //slither-disable-next-line reentrancy-balance
-    function withdraw4(address token, bytes32 vaultId, Float targetAmount, TaskV2[] calldata tasks)
+    function withdraw5(address token, bytes32 vaultId, Float targetAmount, TaskV3[] calldata tasks)
         external
         onlyAdminOrOperator
         whenNotPaused
@@ -187,7 +187,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         // Reverts rather than hand Raindex a target that differs from `requested`.
         Float flooredTarget = LibDecimalFloat.fromFixedDecimalLosslessPacked(requested, decimals);
         uint256 balBefore = IERC20(token).balanceOf(address(this));
-        RAINDEX.withdraw4(token, vaultId, flooredTarget, tasks);
+        RAINDEX.withdraw5(token, vaultId, flooredTarget, tasks);
         uint256 received = IERC20(token).balanceOf(address(this)) - balBefore;
         // `requested >= 1` here, so a short vault always trips this and a
         // covered draw always yields `received >= requested >= 1`.
@@ -198,7 +198,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
 
     /// @notice Pull `depositAmount` of `token` from the caller and deposit it
     /// into `vaultId`. The caller must have approved this contract for `token`.
-    /// @dev Drop-in `IRaindexV6.deposit4` signature. A sub-precision
+    /// @dev Drop-in `IRaindexV7.deposit5` signature. A sub-precision
     /// `depositAmount` is rounded UP to the token's decimals: the caller pays
     /// that ceiling, and Raindex is handed the ceiling as an exact Float, so
     /// the vault is credited exactly what the caller paid and Raindex pulls
@@ -210,7 +210,7 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @param tasks Forwarded verbatim to Raindex to run after the deposit.
     /// Admin only: a non-empty array from an operator reverts
     /// `OperatorTasksForbidden`.
-    function deposit4(address token, bytes32 vaultId, Float depositAmount, TaskV2[] calldata tasks)
+    function deposit5(address token, bytes32 vaultId, Float depositAmount, TaskV3[] calldata tasks)
         external
         onlyAdminOrOperator
         whenNotPaused
@@ -226,56 +226,56 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
         SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);
         // Exact allowance: Raindex can never pull stray balances from here.
         SafeERC20.forceApprove(IERC20(token), address(RAINDEX), amount);
-        RAINDEX.deposit4(token, vaultId, charged, tasks);
+        RAINDEX.deposit5(token, vaultId, charged, tasks);
         emit OperatorDeposit(msg.sender, token, vaultId, amount);
     }
 
     // ---------------------------------------------------------------------
-    // Raindex order management (admin only, drop-in IRaindexV6 sigs)
+    // Raindex order management (admin only, drop-in IRaindexV7 sigs)
     // ---------------------------------------------------------------------
-    // Identical signatures to IRaindexV6 so existing Raindex tooling works by
+    // Identical signatures to IRaindexV7 so existing Raindex tooling works by
     // pointing at this address. Orders/vaults are owned by this contract's
     // address — tooling queries by that owner.
 
     /// @notice Add an order to Raindex, owned by this contract. Drop-in
-    /// `IRaindexV6.addOrder4` signature; NOT pause-gated (order management is
+    /// `IRaindexV7.addOrder5` signature; NOT pause-gated (order management is
     /// the incident-response surface).
     /// @param config Forwarded verbatim to Raindex.
     /// @param tasks Forwarded verbatim to Raindex.
     /// @return True if the order was newly added, as reported by Raindex.
-    function addOrder4(OrderConfigV4 calldata config, TaskV2[] calldata tasks)
+    function addOrder5(OrderConfigV4 calldata config, TaskV3[] calldata tasks)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
         returns (bool)
     {
-        return RAINDEX.addOrder4(config, tasks);
+        return RAINDEX.addOrder5(config, tasks);
     }
 
     /// @notice Remove one of this contract's orders from Raindex. Drop-in
-    /// `IRaindexV6.removeOrder3` signature; NOT pause-gated so the admin can
+    /// `IRaindexV7.removeOrder4` signature; NOT pause-gated so the admin can
     /// cancel orders mid-incident.
     /// @param order Forwarded verbatim to Raindex.
     /// @param tasks Forwarded verbatim to Raindex.
     /// @return True if the order existed and was removed, as reported by Raindex.
-    function removeOrder3(OrderV4 calldata order, TaskV2[] calldata tasks)
+    function removeOrder4(OrderV4 calldata order, TaskV3[] calldata tasks)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
         returns (bool)
     {
-        return RAINDEX.removeOrder3(order, tasks);
+        return RAINDEX.removeOrder4(order, tasks);
     }
 
     /// @notice Run tasks on Raindex as this contract. Drop-in
-    /// `IRaindexV6.entask2` signature; NOT pause-gated.
+    /// `IRaindexV7.entask3` signature; NOT pause-gated.
     /// @param tasks Forwarded verbatim to Raindex.
-    function entask2(TaskV2[] calldata tasks) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        RAINDEX.entask2(tasks);
+    function entask3(TaskV3[] calldata tasks) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        RAINDEX.entask3(tasks);
     }
 
     // Views: forward so tooling can read through this address (owner = this).
 
     /// @notice Read a vault balance through this contract. Forwards verbatim
-    /// to `IRaindexV6.vaultBalance2`.
+    /// to `IRaindexV7.vaultBalance2`.
     /// @param owner_ The vault owner to query (typically this contract).
     /// @param token The vault's token.
     /// @param vaultId The vault to query.
@@ -285,14 +285,14 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     }
 
     /// @notice Whether an order hash exists on Raindex. Forwards verbatim to
-    /// `IRaindexV6.orderExists`.
+    /// `IRaindexV7.orderExists`.
     /// @param orderHash The order hash to query.
     /// @return True if the order exists.
     function orderExists(bytes32 orderHash) external view returns (bool) {
         return RAINDEX.orderExists(orderHash);
     }
 
-    /// @notice Quote an order through this contract via `IRaindexV6.quote2`.
+    /// @notice Quote an order through this contract via `IRaindexV7.quote3`.
     /// Raindex evaluates the quote with THIS contract as the counterparty, not
     /// the original caller, so counterparty-dependent orders can quote
     /// differently than a direct Raindex call.
@@ -300,24 +300,24 @@ contract RaindexInventory is AccessControl, Pausable, ReentrancyGuard, Multicall
     /// @return exists Whether the quoted order exists.
     /// @return outputMax The maximum output as a Raindex decimal Float.
     /// @return ioRatio The input:output ratio as a Raindex decimal Float.
-    function quote2(QuoteV2 calldata quoteConfig) external view returns (bool exists, Float outputMax, Float ioRatio) {
+    function quote3(QuoteV3 calldata quoteConfig) external view returns (bool exists, Float outputMax, Float ioRatio) {
         //slither-disable-next-line unused-return
-        return RAINDEX.quote2(quoteConfig);
+        return RAINDEX.quote3(quoteConfig);
     }
 
     // ---------------------------------------------------------------------
     // Admin
     // ---------------------------------------------------------------------
 
-    /// @notice Kill switch: [`deposit4`] and [`withdraw4`] revert
+    /// @notice Kill switch: [`deposit5`] and [`withdraw5`] revert
     /// `EnforcedPause` for the admin and operators. Raindex keeps clearing the
     /// live orders this contract owns, so incident response must also
-    /// [`removeOrder3`] them; order management stays available for that.
+    /// [`removeOrder4`] them; order management stays available for that.
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
 
-    /// @notice Lift the kill switch: [`deposit4`] / [`withdraw4`] work again.
+    /// @notice Lift the kill switch: [`deposit5`] / [`withdraw5`] work again.
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }

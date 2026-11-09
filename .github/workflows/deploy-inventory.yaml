@@ -24,7 +24,7 @@ on:
         required: true
         type: string
       raindex:
-        description: "Raindex OrderBook (IRaindexV6) address"
+        description: "Raindex OrderBook (IRaindexV7) address"
         required: true
         type: string
       legacy:

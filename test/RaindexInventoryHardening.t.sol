@@ -4,19 +4,15 @@ pragma solidity =0.8.25;
 
 import {RaindexInventoryTestBase} from "./RaindexInventoryTestBase.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
-import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
 import {
+    IRaindexV7,
     OrderConfigV4,
     OrderV4,
-    TaskV2,
-    QuoteV2
-} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+    TaskV3,
+    QuoteV3
+} from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
-import {
-    EvaluableV4,
-    IInterpreterV4,
-    IInterpreterStoreV3
-} from "rainlang-0.2.30/src/interface/deprecated/v3/IInterpreterCallerV4.sol";
+import {EvaluableV4, IInterpreterV4, IInterpreterStoreV3} from "rainlang-0.2.30/src/interface/IInterpreterCallerV5.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -35,7 +31,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
     function test_constructor_zeroRaindex_reverts() external {
         vm.expectRevert(RaindexInventory.ZeroAddress.selector);
-        new RaindexInventory(admin, IRaindexV6(address(0)));
+        new RaindexInventory(admin, IRaindexV7(address(0)));
     }
 
     // ---- OPERATOR_ROLE hash is a production ABI ----
@@ -105,7 +101,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
         uint256 opBefore = IERC20(USDC).balanceOf(operator);
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(100e6), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(100e6), _noTasks());
         assertEq(IERC20(USDC).balanceOf(operator) - opBefore, 100e6, "withdraw works again after unpause");
     }
 
@@ -121,7 +117,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
         vm.prank(operator);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        inv.deposit4(USDC, VAULT, _float(100e6), _noTasks());
+        inv.deposit5(USDC, VAULT, _float(100e6), _noTasks());
     }
 
     function test_pause_blocksAdminVaultMovement() external {
@@ -135,11 +131,11 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
         vm.prank(admin);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        inv.deposit4(USDC, VAULT, _float(50e6), _noTasks());
+        inv.deposit5(USDC, VAULT, _float(50e6), _noTasks());
 
         vm.prank(admin);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        inv.withdraw4(USDC, VAULT, _float(100e6), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(100e6), _noTasks());
     }
 
     /// @dev `rescue` is deliberately not pause-gated: incident recovery of
@@ -157,22 +153,22 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
     // ---- order management gates ----
 
-    function test_addOrder4_nonAdmin_reverts() external {
+    function test_addOrder5_nonAdmin_reverts() external {
         OrderConfigV4 memory config;
         vm.prank(operator);
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, operator, ADMIN_ROLE)
         );
-        inv.addOrder4(config, _noTasks());
+        inv.addOrder5(config, _noTasks());
     }
 
-    function test_removeOrder3_nonAdmin_reverts() external {
+    function test_removeOrder4_nonAdmin_reverts() external {
         OrderV4 memory order;
         vm.prank(operator);
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, operator, ADMIN_ROLE)
         );
-        inv.removeOrder3(order, _noTasks());
+        inv.removeOrder4(order, _noTasks());
     }
 
     // ---- order management stays open while paused, so the admin can cancel
@@ -182,58 +178,58 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.prank(admin);
         inv.pause();
 
-        // entask2 with no tasks reaches the live Raindex and succeeds.
+        // entask3 with no tasks reaches the live Raindex and succeeds.
         vm.prank(admin);
-        inv.entask2(_noTasks());
+        inv.entask3(_noTasks());
 
-        // removeOrder3 of a nonexistent order reaches the live Raindex and
+        // removeOrder4 of a nonexistent order reaches the live Raindex and
         // returns false (nothing removed) rather than reverting on pause.
         OrderV4 memory order;
         order.owner = address(inv);
         order.nonce = bytes32(uint256(0xdead));
         vm.prank(admin);
-        assertFalse(inv.removeOrder3(order, _noTasks()), "nonexistent order not removed");
+        assertFalse(inv.removeOrder4(order, _noTasks()), "nonexistent order not removed");
 
-        // addOrder4 is not pause-gated either: the inventory forwards it even
+        // addOrder5 is not pause-gated either: the inventory forwards it even
         // while paused (Raindex response mocked so no valid expression is
         // needed — the pause/gate logic under test lives in the inventory).
         OrderConfigV4 memory config;
-        vm.mockCall(address(RAINDEX), abi.encodeWithSelector(IRaindexV6.addOrder4.selector), abi.encode(true));
+        vm.mockCall(address(RAINDEX), abi.encodeWithSelector(IRaindexV7.addOrder5.selector), abi.encode(true));
         vm.prank(admin);
-        assertTrue(inv.addOrder4(config, _noTasks()), "addOrder4 forwards while paused");
+        assertTrue(inv.addOrder5(config, _noTasks()), "addOrder5 forwards while paused");
         vm.clearMockedCalls();
     }
 
     // ---- order management and view calls reach Raindex ----
 
-    function test_addOrder4_forwardsToRaindex_andReturns() external {
+    function test_addOrder5_forwardsToRaindex_andReturns() external {
         OrderConfigV4 memory config;
         config.nonce = bytes32(uint256(0xbeef));
-        bytes memory expected = abi.encodeCall(IRaindexV6.addOrder4, (config, _noTasks()));
+        bytes memory expected = abi.encodeCall(IRaindexV7.addOrder5, (config, _noTasks()));
         vm.mockCall(address(RAINDEX), expected, abi.encode(true));
         vm.expectCall(address(RAINDEX), expected);
         vm.prank(admin);
-        assertTrue(inv.addOrder4(config, _noTasks()), "returns Raindex's result");
+        assertTrue(inv.addOrder5(config, _noTasks()), "returns Raindex's result");
         vm.clearMockedCalls();
     }
 
-    function test_removeOrder3_forwardsToRaindex_andReturns() external {
+    function test_removeOrder4_forwardsToRaindex_andReturns() external {
         OrderV4 memory order;
         order.owner = address(inv);
         order.nonce = bytes32(uint256(0xbeef));
-        bytes memory expected = abi.encodeCall(IRaindexV6.removeOrder3, (order, _noTasks()));
+        bytes memory expected = abi.encodeCall(IRaindexV7.removeOrder4, (order, _noTasks()));
         vm.mockCall(address(RAINDEX), expected, abi.encode(true));
         vm.expectCall(address(RAINDEX), expected);
         vm.prank(admin);
-        assertTrue(inv.removeOrder3(order, _noTasks()), "returns Raindex's result");
+        assertTrue(inv.removeOrder4(order, _noTasks()), "returns Raindex's result");
         vm.clearMockedCalls();
     }
 
-    function test_entask2_forwardsToRaindex() external {
-        bytes memory expected = abi.encodeCall(IRaindexV6.entask2, (_noTasks()));
+    function test_entask3_forwardsToRaindex() external {
+        bytes memory expected = abi.encodeCall(IRaindexV7.entask3, (_noTasks()));
         vm.expectCall(address(RAINDEX), expected);
         vm.prank(admin);
-        inv.entask2(_noTasks());
+        inv.entask3(_noTasks());
     }
 
     function test_vaultBalance2_forwardsToRaindex() external {
@@ -245,7 +241,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
             "view mismatch vs direct Raindex read"
         );
         // ...and the plumbing is byte-exact (distinctive mocked value round-trips).
-        bytes memory expected = abi.encodeCall(IRaindexV6.vaultBalance2, (address(0xabc), USDC, VAULT));
+        bytes memory expected = abi.encodeCall(IRaindexV7.vaultBalance2, (address(0xabc), USDC, VAULT));
         vm.mockCall(address(RAINDEX), expected, abi.encode(Float.wrap(bytes32(uint256(0x12345)))));
         assertEq(Float.unwrap(inv.vaultBalance2(address(0xabc), USDC, VAULT)), bytes32(uint256(0x12345)));
         vm.clearMockedCalls();
@@ -254,21 +250,21 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
     function test_orderExists_forwardsToRaindex() external {
         bytes32 orderHash = bytes32(uint256(0xfeed));
         assertEq(inv.orderExists(orderHash), RAINDEX.orderExists(orderHash), "real read matches");
-        bytes memory expected = abi.encodeCall(IRaindexV6.orderExists, (orderHash));
+        bytes memory expected = abi.encodeCall(IRaindexV7.orderExists, (orderHash));
         vm.mockCall(address(RAINDEX), expected, abi.encode(true));
         assertTrue(inv.orderExists(orderHash), "mocked true round-trips");
         vm.clearMockedCalls();
     }
 
-    function test_quote2_forwardsToRaindex() external {
-        QuoteV2 memory quoteConfig;
-        bytes memory expected = abi.encodeCall(IRaindexV6.quote2, (quoteConfig));
+    function test_quote3_forwardsToRaindex() external {
+        QuoteV3 memory quoteConfig;
+        bytes memory expected = abi.encodeCall(IRaindexV7.quote3, (quoteConfig));
         vm.mockCall(
             address(RAINDEX),
             expected,
             abi.encode(true, Float.wrap(bytes32(uint256(7))), Float.wrap(bytes32(uint256(9))))
         );
-        (bool exists, Float outputMax, Float ioRatio) = inv.quote2(quoteConfig);
+        (bool exists, Float outputMax, Float ioRatio) = inv.quote3(quoteConfig);
         assertTrue(exists);
         assertEq(Float.unwrap(outputMax), bytes32(uint256(7)));
         assertEq(Float.unwrap(ioRatio), bytes32(uint256(9)));
@@ -279,38 +275,38 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
     /// @dev A recognizable non-empty task; never executed (the Raindex call is
     /// mocked), it only has to survive the abi.encode round-trip byte-exactly.
-    function _dummyTasks() internal pure returns (TaskV2[] memory tasks) {
-        tasks = new TaskV2[](1);
+    function _dummyTasks() internal pure returns (TaskV3[] memory tasks) {
+        tasks = new TaskV3[](1);
         tasks[0].evaluable =
             EvaluableV4(IInterpreterV4(address(0xdeadbeef)), IInterpreterStoreV3(address(0xcafe)), hex"c0de");
     }
 
-    function test_withdraw4_forwardsTasksToRaindex() external {
+    function test_withdraw5_forwardsTasksToRaindex() external {
         // Driven against the live Raindex, because a mock cannot deliver the
         // tokens the balance-delta check needs. The task has distinct nonzero
         // interpreter and store fields but empty bytecode, which Raindex skips
         // at runtime, so the full calldata check sees every field. `_float(1e6)`
         // is exact at 6dp, so the floored target equals what the caller passed.
         _depositAs(admin, VAULT, 2e6);
-        TaskV2[] memory tasks = new TaskV2[](1);
+        TaskV3[] memory tasks = new TaskV3[](1);
         tasks[0].evaluable =
             EvaluableV4(IInterpreterV4(address(0xdeadbeef)), IInterpreterStoreV3(address(0xcafe)), hex"");
 
         // Tasks are admin only, so the admin is the caller here.
-        bytes memory expected = abi.encodeCall(IRaindexV6.withdraw4, (USDC, VAULT, _float(1e6), tasks));
+        bytes memory expected = abi.encodeCall(IRaindexV7.withdraw5, (USDC, VAULT, _float(1e6), tasks));
         vm.expectCall(address(RAINDEX), expected);
         vm.prank(admin);
-        inv.withdraw4(USDC, VAULT, _float(1e6), tasks);
+        inv.withdraw5(USDC, VAULT, _float(1e6), tasks);
     }
 
-    function test_deposit4_forwardsTasksToRaindex() external {
-        TaskV2[] memory tasks = _dummyTasks();
+    function test_deposit5_forwardsTasksToRaindex() external {
+        TaskV3[] memory tasks = _dummyTasks();
         Float zero = _float(0);
-        bytes memory expected = abi.encodeCall(IRaindexV6.deposit4, (USDC, VAULT, zero, tasks));
+        bytes memory expected = abi.encodeCall(IRaindexV7.deposit5, (USDC, VAULT, zero, tasks));
         vm.mockCall(address(RAINDEX), expected, "");
         vm.expectCall(address(RAINDEX), expected);
         vm.prank(admin);
-        inv.deposit4(USDC, VAULT, zero, tasks);
+        inv.deposit5(USDC, VAULT, zero, tasks);
         vm.clearMockedCalls();
     }
 
@@ -319,16 +315,16 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
     function test_operatorTasks_forbidden() external {
         _depositAs(admin, VAULT, 5e6);
-        TaskV2[] memory tasks = new TaskV2[](1);
+        TaskV3[] memory tasks = new TaskV3[](1);
         deal(USDC, operator, 1e6);
         vm.startPrank(operator);
         IERC20(USDC).approve(address(inv), 1e6);
         vm.expectRevert(RaindexInventory.OperatorTasksForbidden.selector);
-        inv.withdraw4(USDC, VAULT, _float(1e6), tasks);
+        inv.withdraw5(USDC, VAULT, _float(1e6), tasks);
         vm.expectRevert(RaindexInventory.OperatorTasksForbidden.selector);
-        inv.deposit4(USDC, VAULT, _float(1e6), tasks);
+        inv.deposit5(USDC, VAULT, _float(1e6), tasks);
         // Empty tasks still work for the operator.
-        inv.withdraw4(USDC, VAULT, _float(1e6), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(1e6), _noTasks());
         vm.stopPrank();
         assertEq(IERC20(USDC).balanceOf(operator), 2e6, "operator kept its 1e6 and withdrew 1e6");
     }
@@ -341,13 +337,13 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
 
         uint256 opBefore = IERC20(USDC).balanceOf(operator);
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(100e6), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(100e6), _noTasks());
 
         assertEq(IERC20(USDC).balanceOf(operator) - opBefore, 100e6, "caller gets exactly the withdrawn amount");
         assertEq(IERC20(USDC).balanceOf(address(inv)), 42e6, "stray balance NOT swept to the caller");
     }
 
-    // ---- withdraw4 floors the target to token precision, so Raindex debits
+    // ---- withdraw5 floors the target to token precision, so Raindex debits
     // the vault by exactly what leaves it ----
 
     function test_withdraw_subPrecisionTarget_burnsNoVaultDust() external {
@@ -359,7 +355,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         Float f = LibDecimalFloat.packLossless(10_000_005, -7);
         uint256 opBefore = IERC20(USDC).balanceOf(operator);
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, f, _noTasks());
+        inv.withdraw5(USDC, VAULT, f, _noTasks());
 
         (uint256 vaultAfter18,) = RAINDEX.vaultBalance2(address(inv), USDC, VAULT).toFixedDecimalLossy(18);
         assertEq(IERC20(USDC).balanceOf(operator) - opBefore, 1_000_000, "caller receives the floored amount");
@@ -372,7 +368,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         _depositAs(admin, VAULT, 5e6);
         uint256 opBefore = IERC20(USDC).balanceOf(operator);
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(1), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(1), _noTasks());
         assertEq(IERC20(USDC).balanceOf(operator) - opBefore, 1, "one raw unit is not a no-op");
         assertEq(_vaultRaw(USDC, VAULT), 5e6 - 1, "vault debited one raw unit");
     }
@@ -391,7 +387,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         vm.expectEmit(true, true, true, true, address(inv));
         emit OperatorWithdraw(operator, USDC, VAULT, 100e6);
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(100e6), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(100e6), _noTasks());
     }
 
     function test_deposit_emitsOperatorDeposit() external {
@@ -400,7 +396,7 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         IERC20(USDC).approve(address(inv), 100e6);
         vm.expectEmit(true, true, true, true, address(inv));
         emit OperatorDeposit(operator, USDC, VAULT, 100e6);
-        inv.deposit4(USDC, VAULT, _float(100e6), _noTasks());
+        inv.deposit5(USDC, VAULT, _float(100e6), _noTasks());
         vm.stopPrank();
     }
 
@@ -411,9 +407,35 @@ contract RaindexInventoryHardeningTest is RaindexInventoryTestBase {
         _depositAs(admin, VAULT, 5e6);
         // forge-lint: disable-next-line(unsafe-typecast)
         Float f = LibDecimalFloat.packLossless(int256(coefficient), -7);
-        vm.expectCall(address(RAINDEX), abi.encodeWithSelector(IRaindexV6.withdraw4.selector), 0);
+        vm.expectCall(address(RAINDEX), abi.encodeWithSelector(IRaindexV7.withdraw5.selector), 0);
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSelector(RaindexInventory.ZeroWithdrawAmount.selector, USDC, VAULT));
-        inv.withdraw4(USDC, VAULT, f, _noTasks());
+        inv.withdraw5(USDC, VAULT, f, _noTasks());
+    }
+
+    // ---- Raindex V7 vault 0 ----
+
+    /// @dev V7 reserves vault 0 for vaultless orders (the owner's wallet
+    /// balance capped by its allowance). The inventory forwards vault 0 and
+    /// Raindex rejects it, so no operator can move funds through vault 0.
+    function test_vault0_depositAndWithdraw_revertZeroVaultId() external {
+        deal(USDC, operator, 1e6);
+        vm.startPrank(operator);
+        IERC20(USDC).approve(address(inv), 1e6);
+        vm.expectRevert(abi.encodeWithSelector(IRaindexV7.ZeroVaultId.selector, address(inv), USDC));
+        inv.deposit5(USDC, bytes32(0), _float(1e6), _noTasks());
+        vm.expectRevert(abi.encodeWithSelector(IRaindexV7.ZeroVaultId.selector, address(inv), USDC));
+        inv.withdraw5(USDC, bytes32(0), _float(1e6), _noTasks());
+        vm.stopPrank();
+    }
+
+    /// @dev The inventory never leaves an allowance to Raindex, so its V7
+    /// vault-0 balance stays zero even while it holds a stray balance: a
+    /// vaultless order owned by the inventory has no capital to clear.
+    function test_vault0_balanceZero_withStrayBalance() external {
+        _depositAs(admin, VAULT, 10e6);
+        deal(USDC, address(inv), 7e6);
+        assertEq(IERC20(USDC).allowance(address(inv), address(RAINDEX)), 0, "no allowance left");
+        assertTrue(RAINDEX.vaultBalance2(address(inv), USDC, bytes32(0)).isZero(), "vault 0 is empty");
     }
 }
