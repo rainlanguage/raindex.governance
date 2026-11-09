@@ -6,7 +6,7 @@ import {RaindexInventoryTestBase} from "./RaindexInventoryTestBase.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
 import {ReentrantERC20} from "./hostile/ReentrantERC20.sol";
 import {DonatingERC20} from "./hostile/DonatingERC20.sol";
-import {TaskV2} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+import {TaskV3} from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -27,10 +27,10 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         evil.mint(operator, 10e6);
         vm.startPrank(operator);
         evil.approve(address(inv), 10e6);
-        inv.deposit4(address(evil), EVIL_VAULT, _float(10e6), _noTasks());
+        inv.deposit5(address(evil), EVIL_VAULT, _float(10e6), _noTasks());
         vm.stopPrank();
 
-        // Re-enter withdraw4 from inside the inventory's OWN forward transfer
+        // Re-enter withdraw5 from inside the inventory's OWN forward transfer
         // to the caller (hook #2). Hook #1 (Raindex's transfer to the
         // inventory) is skipped: that window sits inside Raindex's own
         // reentrancy guard, which shares the OZ error selector, so it cannot
@@ -39,15 +39,15 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         // it.
         evil.arm(
             address(inv),
-            abi.encodeCall(RaindexInventory.withdraw4, (address(evil), EVIL_VAULT, _float(1e6), _noTasks())),
+            abi.encodeCall(RaindexInventory.withdraw5, (address(evil), EVIL_VAULT, _float(1e6), _noTasks())),
             1
         );
         uint256 opBefore = evil.balanceOf(operator);
         vm.prank(operator);
-        inv.withdraw4(address(evil), EVIL_VAULT, _float(5e6), _noTasks());
+        inv.withdraw5(address(evil), EVIL_VAULT, _float(5e6), _noTasks());
 
         assertTrue(evil.reentryFired(), "re-entry hook fired");
-        assertFalse(evil.reentrySucceeded(), "re-entrant withdraw4 must revert");
+        assertFalse(evil.reentrySucceeded(), "re-entrant withdraw5 must revert");
         assertEq(
             evil.reentryRevertSelector(),
             ReentrancyGuard.ReentrancyGuardReentrantCall.selector,
@@ -63,21 +63,21 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         evil.mint(address(evil), 1e6); // funds for the re-entrant deposit attempt
         evil.mint(operator, 10e6);
 
-        // Re-enter deposit4 from inside the inventory's safeTransferFrom pull
+        // Re-enter deposit5 from inside the inventory's safeTransferFrom pull
         // (hook #1) — this window precedes any Raindex involvement, so the
         // inventory's own guard is what must trip.
         evil.arm(
             address(inv),
-            abi.encodeCall(RaindexInventory.deposit4, (address(evil), EVIL_VAULT, _float(1e6), _noTasks())),
+            abi.encodeCall(RaindexInventory.deposit5, (address(evil), EVIL_VAULT, _float(1e6), _noTasks())),
             0
         );
         vm.startPrank(operator);
         evil.approve(address(inv), 10e6);
-        inv.deposit4(address(evil), EVIL_VAULT, _float(10e6), _noTasks());
+        inv.deposit5(address(evil), EVIL_VAULT, _float(10e6), _noTasks());
         vm.stopPrank();
 
         assertTrue(evil.reentryFired(), "re-entry hook fired");
-        assertFalse(evil.reentrySucceeded(), "re-entrant deposit4 must revert");
+        assertFalse(evil.reentrySucceeded(), "re-entrant deposit5 must revert");
         assertEq(
             evil.reentryRevertSelector(),
             ReentrancyGuard.ReentrancyGuardReentrantCall.selector,
@@ -94,7 +94,7 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         donor.mint(operator, 10e6);
         vm.startPrank(operator);
         donor.approve(address(inv), 10e6);
-        inv.deposit4(address(donor), EVIL_VAULT, _float(10e6), _noTasks());
+        inv.deposit5(address(donor), EVIL_VAULT, _float(10e6), _noTasks());
         vm.stopPrank();
 
         // Next transfer INTO the inventory delivers +2e6 on top.
@@ -106,7 +106,7 @@ contract RaindexInventoryReentrancyTest is RaindexInventoryTestBase {
         vm.expectEmit(true, true, true, true, address(inv));
         emit OperatorWithdraw(operator, address(donor), EVIL_VAULT, 7e6);
         vm.prank(operator);
-        inv.withdraw4(address(donor), EVIL_VAULT, _float(5e6), _noTasks());
+        inv.withdraw5(address(donor), EVIL_VAULT, _float(5e6), _noTasks());
 
         assertEq(donor.balanceOf(operator) - opBefore, 7e6, "caller receives request + over-delivery");
         assertEq(donor.balanceOf(address(inv)), 0, "nothing stranded on the inventory");

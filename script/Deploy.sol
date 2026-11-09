@@ -5,7 +5,7 @@ pragma solidity =0.8.25;
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
-import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
+import {IRaindexV7} from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 
 // Network selector (DEPLOYMENT_SUITE env): picks which foundry.toml
 // rpc_endpoint to fork + broadcast to. The constructor args are passed
@@ -27,7 +27,7 @@ bytes32 constant SUITE_ROBINHOOD = keccak256("robinhood");
 ///
 /// The deployer only pays gas and is NOT granted any role. `INVENTORY_ADMIN`
 /// receives `DEFAULT_ADMIN_ROLE`, which already subsumes `OPERATOR_ROLE`
-/// (deposit4/withdraw4 accept either), so no follow-up grant is needed for the
+/// (deposit5/withdraw5 accept either), so no follow-up grant is needed for the
 /// admin. Operator grants to any venue adapters are a separate admin-signed
 /// step, made by the deployed contract's owner.
 contract Deploy is Script {
@@ -60,7 +60,7 @@ contract Deploy is Script {
         }
 
         // Required — reverts if unset. admin -> DEFAULT_ADMIN_ROLE; raindex is
-        // the IRaindexV6 OrderBook the inventory owns its orders/vaults in.
+        // the IRaindexV7 OrderBook the inventory owns its orders/vaults in.
         address admin = vm.envAddress("INVENTORY_ADMIN");
         address raindex = vm.envAddress("INVENTORY_RAINDEX");
         require(admin != address(0) && raindex != address(0), "zero admin/raindex");
@@ -70,7 +70,7 @@ contract Deploy is Script {
         require(raindex.code.length > 0, "raindex has no code");
 
         vm.startBroadcast(deployerKey);
-        RaindexInventory inventory = new RaindexInventory(admin, IRaindexV6(raindex));
+        RaindexInventory inventory = new RaindexInventory(admin, IRaindexV7(raindex));
         vm.stopBroadcast();
 
         console2.log("RaindexInventory deployed at:", address(inventory));

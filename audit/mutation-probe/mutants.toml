@@ -21,7 +21,7 @@ replacement = ""
 name = "M03 RAINDEX bound to wrong address"
 file = "src/RaindexInventory.sol"
 target = "RAINDEX = raindex_;"
-replacement = "RAINDEX = IRaindexV6(address(1));"
+replacement = "RAINDEX = IRaindexV7(address(1));"
 
 [[mutants]]
 name = "M04 admin role granted to deployer"
@@ -68,20 +68,20 @@ replacement = "revert IAccessControl.AccessControlUnauthorizedAccount(address(0)
 [[mutants]]
 name = "M11 withdraw RBAC dropped"
 file = "src/RaindexInventory.sol"
-target = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
-replacement = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n"
+target = "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n"
 
 [[mutants]]
 name = "M12 withdraw pause dropped"
 file = "src/RaindexInventory.sol"
-target = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
-replacement = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n"
+target = "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n"
 
 [[mutants]]
 name = "M13 withdraw nonReentrant dropped"
 file = "src/RaindexInventory.sol"
-target = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
-replacement = "Float targetAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n"
+target = "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float targetAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n"
 
 [[mutants]]
 name = "M15 withdraw balBefore zero"
@@ -140,20 +140,20 @@ replacement = "emit OperatorWithdraw(msg.sender, token, bytes32(0), received);"
 [[mutants]]
 name = "M27 deposit RBAC dropped"
 file = "src/RaindexInventory.sol"
-target = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
-replacement = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n"
+target = "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        whenNotPaused\n        nonReentrant\n"
 
 [[mutants]]
 name = "M28 deposit pause dropped"
 file = "src/RaindexInventory.sol"
-target = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
-replacement = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n"
+target = "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        nonReentrant\n"
 
 [[mutants]]
 name = "M29 deposit nonReentrant dropped"
 file = "src/RaindexInventory.sol"
-target = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
-replacement = "Float depositAmount, TaskV2[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n"
+target = "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n        nonReentrant\n"
+replacement = "Float depositAmount, TaskV3[] calldata tasks)\n        external\n        onlyAdminOrOperator\n        whenNotPaused\n"
 
 [[mutants]]
 name = "M31 deposit round-up dropped"
@@ -192,39 +192,39 @@ target = "emit OperatorDeposit(msg.sender, token, vaultId, amount);"
 replacement = "emit OperatorDeposit(msg.sender, token, vaultId, 0);"
 
 [[mutants]]
-name = "M40 addOrder4 gate dropped"
+name = "M40 addOrder5 gate dropped"
 file = "src/RaindexInventory.sol"
-target = "function addOrder4(OrderConfigV4 calldata config, TaskV2[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n"
-replacement = "function addOrder4(OrderConfigV4 calldata config, TaskV2[] calldata tasks)\n        external\n"
+target = "function addOrder5(OrderConfigV4 calldata config, TaskV3[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n"
+replacement = "function addOrder5(OrderConfigV4 calldata config, TaskV3[] calldata tasks)\n        external\n"
 
 [[mutants]]
-name = "M41 addOrder4 return false"
+name = "M41 addOrder5 return false"
 file = "src/RaindexInventory.sol"
-target = "return RAINDEX.addOrder4(config, tasks);"
-replacement = "RAINDEX.addOrder4(config, tasks);\n        return false;"
+target = "return RAINDEX.addOrder5(config, tasks);"
+replacement = "RAINDEX.addOrder5(config, tasks);\n        return false;"
 
 [[mutants]]
-name = "M42 removeOrder3 gate dropped"
+name = "M42 removeOrder4 gate dropped"
 file = "src/RaindexInventory.sol"
-target = "function removeOrder3(OrderV4 calldata order, TaskV2[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n"
-replacement = "function removeOrder3(OrderV4 calldata order, TaskV2[] calldata tasks)\n        external\n"
+target = "function removeOrder4(OrderV4 calldata order, TaskV3[] calldata tasks)\n        external\n        onlyRole(DEFAULT_ADMIN_ROLE)\n"
+replacement = "function removeOrder4(OrderV4 calldata order, TaskV3[] calldata tasks)\n        external\n"
 
 [[mutants]]
-name = "M43 removeOrder3 return false"
+name = "M43 removeOrder4 return false"
 file = "src/RaindexInventory.sol"
-target = "return RAINDEX.removeOrder3(order, tasks);"
-replacement = "RAINDEX.removeOrder3(order, tasks);\n        return false;"
+target = "return RAINDEX.removeOrder4(order, tasks);"
+replacement = "RAINDEX.removeOrder4(order, tasks);\n        return false;"
 
 [[mutants]]
-name = "M44 entask2 gate dropped"
+name = "M44 entask3 gate dropped"
 file = "src/RaindexInventory.sol"
-target = "function entask2(TaskV2[] calldata tasks) external onlyRole(DEFAULT_ADMIN_ROLE) {"
-replacement = "function entask2(TaskV2[] calldata tasks) external {"
+target = "function entask3(TaskV3[] calldata tasks) external onlyRole(DEFAULT_ADMIN_ROLE) {"
+replacement = "function entask3(TaskV3[] calldata tasks) external {"
 
 [[mutants]]
-name = "M45 entask2 not forwarded"
+name = "M45 entask3 not forwarded"
 file = "src/RaindexInventory.sol"
-target = "RAINDEX.entask2(tasks);"
+target = "RAINDEX.entask3(tasks);"
 replacement = ""
 
 [[mutants]]
@@ -240,10 +240,10 @@ target = "return RAINDEX.orderExists(orderHash);"
 replacement = "return !RAINDEX.orderExists(orderHash);"
 
 [[mutants]]
-name = "M48 quote2 outputs swapped"
+name = "M48 quote3 outputs swapped"
 file = "src/RaindexInventory.sol"
-target = "return RAINDEX.quote2(quoteConfig);"
-replacement = "(bool e, Float o, Float r) = RAINDEX.quote2(quoteConfig);\n        return (e, r, o);"
+target = "return RAINDEX.quote3(quoteConfig);"
+replacement = "(bool e, Float o, Float r) = RAINDEX.quote3(quoteConfig);\n        return (e, r, o);"
 
 [[mutants]]
 name = "M49 pause gate dropped"
@@ -290,8 +290,8 @@ replacement = "SafeERC20.safeTransfer(IERC20(token), address(RAINDEX), amount);"
 [[mutants]]
 name = "M64 withdraw passes unfloored target"
 file = "src/RaindexInventory.sol"
-target = "RAINDEX.withdraw4(token, vaultId, flooredTarget, tasks);"
-replacement = "RAINDEX.withdraw4(token, vaultId, targetAmount, tasks);"
+target = "RAINDEX.withdraw5(token, vaultId, flooredTarget, tasks);"
+replacement = "RAINDEX.withdraw5(token, vaultId, targetAmount, tasks);"
 
 [[mutants]]
 name = "M65 withdraw re-pack at 18dp"
@@ -308,8 +308,8 @@ replacement = "LibDecimalFloat.fromFixedDecimalLosslessPacked(requested + 1, dec
 [[mutants]]
 name = "M67 withdraw tasks dropped"
 file = "src/RaindexInventory.sol"
-target = "RAINDEX.withdraw4(token, vaultId, flooredTarget, tasks);"
-replacement = "RAINDEX.withdraw4(token, vaultId, flooredTarget, new TaskV2[](0));"
+target = "RAINDEX.withdraw5(token, vaultId, flooredTarget, tasks);"
+replacement = "RAINDEX.withdraw5(token, vaultId, flooredTarget, new TaskV3[](0));"
 
 [[mutants]]
 name = "M61b withdraw floor decimals fixed 18"
@@ -350,8 +350,8 @@ replacement = "if (requested == 0) revert ZeroWithdrawAmount(token, bytes32(0));
 [[mutants]]
 name = "M76 deposit credits unrounded"
 file = "src/RaindexInventory.sol"
-target = "RAINDEX.deposit4(token, vaultId, charged, tasks);"
-replacement = "RAINDEX.deposit4(token, vaultId, depositAmount, tasks);"
+target = "RAINDEX.deposit5(token, vaultId, charged, tasks);"
+replacement = "RAINDEX.deposit5(token, vaultId, depositAmount, tasks);"
 
 [[mutants]]
 name = "M77 deposit approves max"
@@ -380,14 +380,14 @@ replacement = "(uint256 amount, bool exact) = depositAmount.toFixedDecimalLossy(
 [[mutants]]
 name = "M81 deposit tasks dropped"
 file = "src/RaindexInventory.sol"
-target = "RAINDEX.deposit4(token, vaultId, charged, tasks);"
-replacement = "RAINDEX.deposit4(token, vaultId, charged, new TaskV2[](0));"
+target = "RAINDEX.deposit5(token, vaultId, charged, tasks);"
+replacement = "RAINDEX.deposit5(token, vaultId, charged, new TaskV3[](0));"
 
 [[mutants]]
 name = "M82 deposit wrong vault"
 file = "src/RaindexInventory.sol"
-target = "RAINDEX.deposit4(token, vaultId, charged, tasks);"
-replacement = "RAINDEX.deposit4(token, bytes32(0), charged, tasks);"
+target = "RAINDEX.deposit5(token, vaultId, charged, tasks);"
+replacement = "RAINDEX.deposit5(token, bytes32(0), charged, tasks);"
 
 [[mutants]]
 name = "M83 deposit approval dropped"

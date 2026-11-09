@@ -4,7 +4,7 @@ pragma solidity =0.8.25;
 
 import {RaindexInventoryTestBase} from "./RaindexInventoryTestBase.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
-import {TaskV2, OrderConfigV4, OrderV4} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+import {TaskV3, OrderConfigV4, OrderV4} from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -12,7 +12,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Property fuzz tests for `RaindexInventory`: conservation against the
 /// caller, over-draw fails atomically, RBAC over arbitrary addresses, pause
-/// fails closed on `deposit4` and `withdraw4` (`rescue` is not pause-gated),
+/// fails closed on `deposit5` and `withdraw5` (`rescue` is not pause-gated),
 /// rounding never dips the pool, concurrent operators. All against the live
 /// Base Raindex.
 contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
@@ -27,7 +27,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
 
         vm.startPrank(operator);
         IERC20(USDC).approve(address(inv), amount);
-        inv.deposit4(USDC, VAULT, _float(amount), _noTasks());
+        inv.deposit5(USDC, VAULT, _float(amount), _noTasks());
         vm.stopPrank();
 
         assertEq(_vaultRaw(USDC, VAULT), amount, "vault credited exactly");
@@ -35,7 +35,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         assertEq(IERC20(USDC).balanceOf(address(inv)), 0, "inventory holds nothing");
 
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(amount), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(amount), _noTasks());
 
         assertEq(_vaultRaw(USDC, VAULT), 0, "vault debited exactly");
         assertEq(IERC20(USDC).balanceOf(operator), amount, "caller recovers exactly");
@@ -51,14 +51,14 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
 
         vm.startPrank(operator);
         IERC20(WETH).approve(address(inv), amount);
-        inv.deposit4(WETH, VAULT, _floatAt(amount, 18), _noTasks());
+        inv.deposit5(WETH, VAULT, _floatAt(amount, 18), _noTasks());
         vm.stopPrank();
 
         assertEq(_vaultRaw(WETH, VAULT), amount, "vault credited exactly");
         assertEq(IERC20(WETH).balanceOf(operator), 0, "caller debited exactly");
 
         vm.prank(operator);
-        inv.withdraw4(WETH, VAULT, _floatAt(amount, 18), _noTasks());
+        inv.withdraw5(WETH, VAULT, _floatAt(amount, 18), _noTasks());
 
         assertEq(_vaultRaw(WETH, VAULT), 0, "vault debited exactly");
         assertEq(IERC20(WETH).balanceOf(operator), amount, "caller recovers exactly");
@@ -77,7 +77,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(RaindexInventory.InsufficientVaultLiquidity.selector, USDC, requested, vaultAmount)
         );
-        inv.withdraw4(USDC, VAULT, _float(requested), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(requested), _noTasks());
     }
 
     /// @dev No address without a role ever moves funds or reaches admin
@@ -94,18 +94,18 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
 
         vm.startPrank(stranger);
         vm.expectRevert(operatorGate);
-        inv.withdraw4(USDC, VAULT, _float(1e6), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(1e6), _noTasks());
         vm.expectRevert(operatorGate);
-        inv.deposit4(USDC, VAULT, _float(1e6), _noTasks());
+        inv.deposit5(USDC, VAULT, _float(1e6), _noTasks());
 
         OrderConfigV4 memory config;
         vm.expectRevert(adminGate);
-        inv.addOrder4(config, _noTasks());
+        inv.addOrder5(config, _noTasks());
         OrderV4 memory order;
         vm.expectRevert(adminGate);
-        inv.removeOrder3(order, _noTasks());
+        inv.removeOrder4(order, _noTasks());
         vm.expectRevert(adminGate);
-        inv.entask2(_noTasks());
+        inv.entask3(_noTasks());
         vm.expectRevert(adminGate);
         inv.pause();
         vm.expectRevert(adminGate);
@@ -119,7 +119,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         vm.stopPrank();
     }
 
-    /// @dev Paused ⇒ `deposit4` and `withdraw4` fail closed for both roles and
+    /// @dev Paused ⇒ `deposit5` and `withdraw5` fail closed for both roles and
     /// any amount; order management stays open. `rescue` is not pause-gated.
     function testFuzz_pause_failsClosed_depositWithdraw(uint256 amount, bool asAdmin) external {
         amount = bound(amount, 1, 1e12);
@@ -134,14 +134,14 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
 
         vm.startPrank(caller);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        inv.deposit4(USDC, VAULT, _float(amount), _noTasks());
+        inv.deposit5(USDC, VAULT, _float(amount), _noTasks());
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        inv.withdraw4(USDC, VAULT, _float(amount), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(amount), _noTasks());
         vm.stopPrank();
 
         // Kill switch leaves order management available.
         vm.prank(admin);
-        inv.entask2(_noTasks());
+        inv.entask3(_noTasks());
 
         assertEq(_vaultRaw(USDC, VAULT), amount, "vault untouched while paused");
     }
@@ -161,7 +161,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         vm.startPrank(operator);
         // Approval of EXACTLY `charged`: pulling one unit more would revert.
         IERC20(USDC).approve(address(inv), charged);
-        inv.deposit4(USDC, VAULT, f, _noTasks());
+        inv.deposit5(USDC, VAULT, f, _noTasks());
         vm.stopPrank();
 
         assertEq(IERC20(USDC).balanceOf(operator), 0, "caller charged exactly the rounded-up amount");
@@ -182,7 +182,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         deal(WETH, operator, charged);
         vm.startPrank(operator);
         IERC20(WETH).approve(address(inv), charged);
-        inv.deposit4(WETH, VAULT, f, _noTasks());
+        inv.deposit5(WETH, VAULT, f, _noTasks());
         vm.stopPrank();
         assertEq(IERC20(WETH).balanceOf(operator), 0, "caller charged exactly the ceiling");
         assertEq(IERC20(WETH).balanceOf(address(inv)), 0, "nothing stranded");
@@ -205,7 +205,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         uint256 expectedRaw = coefficient / 10 ** extraDigits;
         (uint256 vaultBefore18,) = RAINDEX.vaultBalance2(address(inv), token, VAULT).toFixedDecimalLossy(18);
         vm.prank(operator);
-        inv.withdraw4(token, VAULT, target, _noTasks());
+        inv.withdraw5(token, VAULT, target, _noTasks());
         (uint256 vaultAfter18,) = RAINDEX.vaultBalance2(address(inv), token, VAULT).toFixedDecimalLossy(18);
         assertEq(IERC20(token).balanceOf(operator), expectedRaw, "caller receives the floored amount");
         assertEq(vaultBefore18 - vaultAfter18, expectedRaw * 10 ** (18 - dec), "vault debited exactly what was sent");
@@ -216,7 +216,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
     function test_weth_partialWithdraw_exactRemainder() external {
         _depositTokenAs(admin, WETH, 10e18, 18);
         vm.prank(operator);
-        inv.withdraw4(WETH, VAULT, _floatAt(1e18, 18), _noTasks());
+        inv.withdraw5(WETH, VAULT, _floatAt(1e18, 18), _noTasks());
         assertEq(IERC20(WETH).balanceOf(operator), 1e18, "operator received 1 WETH");
         assertEq(_vaultRaw(WETH, VAULT), 9e18, "vault keeps exactly 9 WETH");
     }
@@ -225,7 +225,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         deal(token, who, amount);
         vm.startPrank(who);
         IERC20(token).approve(address(inv), amount);
-        inv.deposit4(token, VAULT, _floatAt(amount, dec), _noTasks());
+        inv.deposit5(token, VAULT, _floatAt(amount, dec), _noTasks());
         vm.stopPrank();
     }
 
@@ -245,13 +245,13 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
         inv.grantRole(OPERATOR_ROLE, operator2);
 
         vm.prank(operator);
-        inv.withdraw4(USDC, VAULT, _float(first), _noTasks());
+        inv.withdraw5(USDC, VAULT, _float(first), _noTasks());
         assertEq(IERC20(USDC).balanceOf(operator), first, "first draw settles in full");
 
         uint256 remaining = vaultAmount - first;
         if (second <= remaining) {
             vm.prank(operator2);
-            inv.withdraw4(USDC, VAULT, _float(second), _noTasks());
+            inv.withdraw5(USDC, VAULT, _float(second), _noTasks());
             assertEq(IERC20(USDC).balanceOf(operator2), second, "covered second draw settles in full");
             assertEq(_vaultRaw(USDC, VAULT), remaining - second, "vault reconciles");
         } else {
@@ -259,7 +259,7 @@ contract RaindexInventoryFuzzTest is RaindexInventoryTestBase {
             vm.expectRevert(
                 abi.encodeWithSelector(RaindexInventory.InsufficientVaultLiquidity.selector, USDC, second, remaining)
             );
-            inv.withdraw4(USDC, VAULT, _float(second), _noTasks());
+            inv.withdraw5(USDC, VAULT, _float(second), _noTasks());
             assertEq(IERC20(USDC).balanceOf(operator2), 0, "loser gets nothing, not a partial fill");
             assertEq(_vaultRaw(USDC, VAULT), remaining, "vault unchanged by the failed draw");
         }

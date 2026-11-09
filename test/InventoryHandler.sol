@@ -4,8 +4,7 @@ pragma solidity =0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {RaindexInventory} from "../src/RaindexInventory.sol";
-import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
-import {TaskV2} from "raindex-interface-0.1.13/src/interface/deprecated/v5/IOrderBookV5.sol";
+import {IRaindexV7, TaskV3} from "raindex-interface-0.1.13/src/interface/IRaindexV7.sol";
 import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalFloat.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
@@ -21,7 +20,7 @@ contract InventoryHandler is Test {
     using LibDecimalFloat for Float;
 
     RaindexInventory internal immutable INV;
-    IRaindexV6 internal immutable RAINDEX_;
+    IRaindexV7 internal immutable RAINDEX_;
     address internal immutable USDC_;
     bytes32 internal immutable VAULT_;
     address internal immutable ADMIN;
@@ -43,7 +42,7 @@ contract InventoryHandler is Test {
 
     constructor(
         RaindexInventory inv_,
-        IRaindexV6 raindex_,
+        IRaindexV7 raindex_,
         // forge-lint: disable-next-line(missing-zero-check)
         address usdc_,
         bytes32 vaultId_,
@@ -85,7 +84,7 @@ contract InventoryHandler is Test {
         vm.startPrank(op);
         IERC20(USDC_).approve(address(INV), amount);
         bool expectFail = INV.paused();
-        try INV.deposit4(USDC_, VAULT_, _float(amount), new TaskV2[](0)) {
+        try INV.deposit5(USDC_, VAULT_, _float(amount), new TaskV3[](0)) {
             if (expectFail) pauseBypassed = true;
             gDeposited += amount;
         } catch (bytes memory err) {
@@ -101,7 +100,7 @@ contract InventoryHandler is Test {
         bool paused = INV.paused();
         bool overdraw = amount > vaultBefore;
         vm.prank(op);
-        try INV.withdraw4(USDC_, VAULT_, _float(amount), new TaskV2[](0)) {
+        try INV.withdraw5(USDC_, VAULT_, _float(amount), new TaskV3[](0)) {
             if (paused) pauseBypassed = true;
             if (overdraw) overdrawSettled = true;
             gWithdrawn += amount;
@@ -143,7 +142,7 @@ contract InventoryHandler is Test {
     }
 
     /// @dev The stranger probes the fund paths, rescue, pause, unpause,
-    /// entask2 and role administration. Any success
+    /// entask3 and role administration. Any success
     /// is an RBAC violation, and so is a revert for any reason other than the
     /// role check: the stranger is funded and has approved the inventory, so
     /// only the role gate can stop it.
@@ -152,12 +151,12 @@ contract InventoryHandler is Test {
         _fund(STRANGER, amount);
         vm.startPrank(STRANGER);
         IERC20(USDC_).approve(address(INV), amount);
-        try INV.withdraw4(USDC_, VAULT_, _float(amount), new TaskV2[](0)) {
+        try INV.withdraw5(USDC_, VAULT_, _float(amount), new TaskV3[](0)) {
             rbacBypassed = true;
         } catch (bytes memory err) {
             _expectUnauthorized(err);
         }
-        try INV.deposit4(USDC_, VAULT_, _float(amount), new TaskV2[](0)) {
+        try INV.deposit5(USDC_, VAULT_, _float(amount), new TaskV3[](0)) {
             rbacBypassed = true;
         } catch (bytes memory err) {
             _expectUnauthorized(err);
@@ -177,7 +176,7 @@ contract InventoryHandler is Test {
         } catch (bytes memory err) {
             _expectUnauthorized(err);
         }
-        try INV.entask2(new TaskV2[](0)) {
+        try INV.entask3(new TaskV3[](0)) {
             rbacBypassed = true;
         } catch (bytes memory err) {
             _expectUnauthorized(err);

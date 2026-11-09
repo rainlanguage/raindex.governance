@@ -59,7 +59,7 @@ contract RaindexInventoryInvariantTest is RaindexInventoryTestBase {
     }
 
     /// @dev RBAC: the stranger's probes of the fund paths, rescue, pause,
-    /// entask2 and role administration never once succeeded.
+    /// entask3 and role administration never once succeeded.
     function invariant_rbacHolds() external view {
         assertFalse(handler.rbacBypassed(), "an unauthorized call succeeded");
     }
