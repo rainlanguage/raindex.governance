@@ -22,8 +22,12 @@ contract MigrationHarness {
         return LibInventoryMigration.calls(plan, moved);
     }
 
-    function resumeCalls(MigrationPlan memory plan, uint256[] memory moved) external view returns (AdminCall[] memory) {
-        return LibInventoryMigration.resumeCalls(plan, moved);
+    function resumeCalls(MigrationPlan memory plan, uint256[] memory moved, address admin)
+        external
+        view
+        returns (AdminCall[] memory)
+    {
+        return LibInventoryMigration.resumeCalls(plan, moved, admin);
     }
 
     function verify(MigrationPlan memory plan, uint256[] memory moved) external view {
