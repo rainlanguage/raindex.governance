@@ -75,6 +75,9 @@ library LibInventoryMigration {
     error OldInventoryNotPaused();
     error NewInventoryNotOnV7(address raindex, bytes32 codehash);
     error OldInventoryAlreadyDrained();
+    error OldInventoryPausedWithFunds(address token, bytes32 vaultId, uint256 balance);
+    error NothingToResume();
+    error AdminBalanceShort(address token, uint256 needed, uint256 held);
     error OldInventoryNotDrained();
     error MovedLengthMismatch(uint256 vaults, uint256 moved);
 
@@ -94,12 +97,8 @@ library LibInventoryMigration {
         if (addOrderCall.length < 4 || bytes4(addOrderCall) != IRaindexV7.addOrder5.selector) {
             revert NotAddOrder5Call(index);
         }
-        bytes memory args = new bytes(addOrderCall.length - 4);
-        for (uint256 i = 0; i < args.length; i++) {
-            args[i] = addOrderCall[i + 4];
-        }
         // The config is the first argument; the tasks after it are not needed.
-        OrderConfigV4 memory config = abi.decode(args, (OrderConfigV4));
+        OrderConfigV4 memory config = abi.decode(_args(addOrderCall), (OrderConfigV4));
         return OrderV4(owner, config.evaluable, config.validInputs, config.validOutputs, config.nonce);
     }
 
@@ -115,14 +114,20 @@ library LibInventoryMigration {
     /// vault moves: its current old-inventory balance, floored. A
     /// sub-raw-unit remainder stays on V6. Read it after the freeze lands.
     function amounts(MigrationPlan memory plan) internal view returns (uint256[] memory moved) {
-        // A paused old inventory is already drained: its vaults read zero, so
-        // a move built now would deposit nothing. Resume from the saved
-        // amounts instead (`resumeCalls`).
-        if (Pausable(plan.oldInventory).paused()) revert OldInventoryAlreadyDrained();
         checkPlan(plan);
         moved = new uint256[](plan.tokens.length);
         for (uint256 i = 0; i < plan.tokens.length; i++) {
             moved[i] = rawVaultBalance(plan.oldInventory, plan.tokens[i], plan.vaultIds[i]);
+        }
+        // A paused old inventory cannot be drained. If its vaults are empty,
+        // the drain already ran, and a move built now would deposit nothing:
+        // resume from the drained amounts instead (`resumeCalls`). If not,
+        // someone paused it with funds in it: unpause first.
+        if (Pausable(plan.oldInventory).paused()) {
+            for (uint256 i = 0; i < moved.length; i++) {
+                if (moved[i] != 0) revert OldInventoryPausedWithFunds(plan.tokens[i], plan.vaultIds[i], moved[i]);
+            }
+            revert OldInventoryAlreadyDrained();
         }
     }
 
@@ -199,7 +204,7 @@ library LibInventoryMigration {
     /// @notice After the drain landed: the approve and new-inventory calls
     /// from the saved `moved` amounts, without the drain. Reverts unless the
     /// old inventory is paused (drained).
-    function resumeCalls(MigrationPlan memory plan, uint256[] memory moved)
+    function resumeCalls(MigrationPlan memory plan, uint256[] memory moved, address admin)
         internal
         view
         returns (AdminCall[] memory out)
@@ -207,7 +212,16 @@ library LibInventoryMigration {
         if (!Pausable(plan.oldInventory).paused()) revert OldInventoryNotDrained();
         checkPlan(plan);
         if (moved.length != plan.tokens.length) revert MovedLengthMismatch(plan.tokens.length, moved.length);
+        if (_nonZero(moved) == 0) revert NothingToResume();
         AdminCall[] memory all = calls(plan, moved);
+        // The admin must still hold every drained amount. This catches an
+        // amount copied too high; one copied too low is caught only by taking
+        // the amounts from a dry run pinned to the block before the drain.
+        for (uint256 i = 1; i + 1 < all.length; i++) {
+            (, uint256 needed) = abi.decode(_args(all[i].data), (address, uint256));
+            uint256 held = IERC20(all[i].target).balanceOf(admin);
+            if (held < needed) revert AdminBalanceShort(all[i].target, needed, held);
+        }
         out = new AdminCall[](all.length - 1);
         for (uint256 i = 0; i < out.length; i++) {
             out[i] = all[i + 1];
@@ -314,6 +328,14 @@ library LibInventoryMigration {
         assembly ("memory-safe") {
             mstore(tokens, tokenCount)
             mstore(totals, tokenCount)
+        }
+    }
+
+    /// @dev The ABI-encoded arguments of `call`, without its selector.
+    function _args(bytes memory call) private pure returns (bytes memory args) {
+        args = new bytes(call.length - 4);
+        for (uint256 i = 0; i < args.length; i++) {
+            args[i] = call[i + 4];
         }
     }
 

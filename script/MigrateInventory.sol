@@ -9,6 +9,8 @@ import {LibInventoryMigration, MigrationPlan, AdminCall} from "./lib/LibInventor
 
 /// @notice Admin call `index` reverted in the simulation.
 error MigrationCallFailed(uint256 index, bytes reason);
+/// @notice `MIGRATION_MODE` is not "", "resume" or "check".
+error UnknownMigrationMode(string mode);
 
 /// @title MigrateInventory
 /// @notice Prints the admin transactions that move a pool from a V6
@@ -26,7 +28,9 @@ error MigrationCallFailed(uint256 index, bytes reason);
 ///
 /// After the drain landed, a normal run reverts `OldInventoryAlreadyDrained`.
 /// `MIGRATION_MODE=resume` then builds only the approve and new-inventory
-/// calls from the plan's saved `moved` amounts. `MIGRATION_MODE=check` only
+/// calls from the plan's `moved` amounts. Take them from a normal run pinned
+/// to the block before the drain (`--fork-block-number`), where the vaults
+/// were frozen. Any other `MIGRATION_MODE` value reverts. `MIGRATION_MODE=check` only
 /// checks the end state on the chain from `moved`. Run it on a fork pinned to
 /// the block of the last move transaction, before trading can change a vault.
 ///
@@ -61,7 +65,7 @@ contract MigrateInventory is Script {
         }
         if (mode == keccak256("resume")) {
             uint256[] memory saved = vm.parseJsonUintArray(json, ".moved");
-            AdminCall[] memory rest = LibInventoryMigration.resumeCalls(plan, saved);
+            AdminCall[] memory rest = LibInventoryMigration.resumeCalls(plan, saved, admin);
             simulate(admin, rest);
             LibInventoryMigration.verify(plan, saved);
             console2.log("simulation: end state verified");
@@ -71,6 +75,7 @@ contract MigrateInventory is Script {
             return;
         }
 
+        if (mode != keccak256("")) revert UnknownMigrationMode(modeName);
         LibInventoryMigration.checkPlan(plan);
         bool freeze = LibInventoryMigration.needsFreeze(plan);
         AdminCall[] memory first = new AdminCall[](freeze ? 1 : 0);

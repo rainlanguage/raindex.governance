@@ -22,7 +22,7 @@ import {LibDecimalFloat, Float} from "rain-math-float-0.3.11/src/lib/LibDecimalF
 import {RaindexInventory} from "../src/RaindexInventory.sol";
 import {RAINDEX_V7} from "../script/lib/RaindexV7Release.sol";
 import {LibInventoryMigration, MigrationPlan, AdminCall} from "../script/lib/LibInventoryMigration.sol";
-import {MigrateInventory, MigrationCallFailed} from "../script/MigrateInventory.sol";
+import {MigrateInventory, MigrationCallFailed, UnknownMigrationMode} from "../script/MigrateInventory.sol";
 import {MigrationHarness} from "./MigrationHarness.sol";
 
 /// @notice Moves the live Base pool from the V6 inventory to a fresh V7
@@ -293,7 +293,7 @@ contract MigrateInventoryTest is Test {
 
     function test_resume_afterDrain_finishesMove() external {
         (MigrationPlan memory plan, uint256[] memory moved) = _drainOnly();
-        AdminCall[] memory rest = harness.resumeCalls(plan, moved);
+        AdminCall[] memory rest = harness.resumeCalls(plan, moved, ADMIN);
         assertEq(rest.length, 3, "two approves and the new multicall");
         script.simulate(ADMIN, rest);
         harness.verify(plan, moved);
@@ -304,13 +304,48 @@ contract MigrateInventoryTest is Test {
         _freeze(plan);
         uint256[] memory moved = harness.amounts(plan);
         vm.expectRevert(LibInventoryMigration.OldInventoryNotDrained.selector);
-        harness.resumeCalls(plan, moved);
+        harness.resumeCalls(plan, moved, ADMIN);
     }
 
     function test_resume_movedLengthMismatch_reverts() external {
         (MigrationPlan memory plan,) = _drainOnly();
         vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.MovedLengthMismatch.selector, 4, 1));
-        harness.resumeCalls(plan, new uint256[](1));
+        harness.resumeCalls(plan, new uint256[](1), ADMIN);
+    }
+
+    function test_resume_allZero_reverts() external {
+        (MigrationPlan memory plan,) = _drainOnly();
+        vm.expectRevert(LibInventoryMigration.NothingToResume.selector);
+        harness.resumeCalls(plan, new uint256[](4), ADMIN);
+    }
+
+    /// @dev An amount copied too high is caught: the admin does not hold it.
+    function test_resume_amountTooHigh_reverts() external {
+        (MigrationPlan memory plan, uint256[] memory moved) = _drainOnly();
+        uint256 held = IERC20(WETH).balanceOf(ADMIN);
+        moved[1] = held + 1;
+        vm.expectRevert(abi.encodeWithSelector(LibInventoryMigration.AdminBalanceShort.selector, WETH, held + 1, held));
+        harness.resumeCalls(plan, moved, ADMIN);
+    }
+
+    /// @dev Pausing the old inventory with funds in it is not a drain.
+    function test_amounts_pausedWithFunds_reverts() external {
+        MigrationPlan memory plan = _plan();
+        uint256 usdc = LibInventoryMigration.rawVaultBalance(OLD, USDC, USDC_VAULT);
+        vm.prank(ADMIN);
+        RaindexInventory(OLD).pause();
+        vm.expectRevert(
+            abi.encodeWithSelector(LibInventoryMigration.OldInventoryPausedWithFunds.selector, USDC, USDC_VAULT, usdc)
+        );
+        harness.amounts(plan);
+    }
+
+    function test_run_unknownMode_reverts() external {
+        vm.createDir("./.tmp", true);
+        string memory path = "./.tmp/migration-test-mode.json";
+        vm.writeJson(_planJson(new uint256[](0)), path);
+        vm.expectRevert(abi.encodeWithSelector(UnknownMigrationMode.selector, "chek"));
+        script.runWith(path, "chek");
     }
 
     /// @dev `run` after the drain refuses to rebuild, and resume mode

@@ -81,8 +81,9 @@ MIGRATION_PLAN=.tmp/plan.json forge script script/MigrateInventory.sol \
 ```
 
 The script prints the admin transactions, runs them on the fork as the admin,
-and checks the end state. It must end with `simulation: end state verified`.
-Without `--broadcast` it sends nothing.
+and checks the end state. It must print `simulation: end state verified` before
+`SIGN NOW`. If the run reverts, it prints nothing to sign. Without `--broadcast`
+it sends nothing. An unknown `MIGRATION_MODE` reverts.
 
 The check fails if a vault amount is not on the new inventory, if an old vault
 still holds a raw unit, if an old order is still live or a new order is missing,
@@ -96,8 +97,10 @@ The script prints it only after the whole move ran on the fork and passed the
 end-state check. Wait for each transaction to confirm before the next.
 
 1. Stop the consumers from taking new work, and wait until none of them holds
-   capital that it must return to the old inventory. From the freeze until step
-   5.1, no consumer can use either inventory.
+   capital that it must return to the old inventory. Stop them in their own
+   config, not with `pause()` on the old inventory: a paused inventory cannot be
+   drained, and the script then reverts `OldInventoryPausedWithFunds`. From the
+   freeze until step 5.2, no consumer can use either inventory.
 2. Freeze. While the old inventory still has a plan operator or a live plan
    order, the dry run prints `SIGN NOW` above one transaction only:
    `oldInventory.multicall`, which revokes the old operators and removes the
@@ -116,10 +119,17 @@ Between the drain and the last transaction, the admin wallet holds the whole
 pool. Sign them back to back. A sub-raw-unit remainder of a vault stays on V6.
 
 If the move stops after the drain, do not run the normal dry run again: it
-reverts `OldInventoryAlreadyDrained`, because the drained vaults read zero. Add
-the saved amounts as `"moved": [...]` to the plan, and run it with
-`MIGRATION_MODE=resume`. It prints only the approve and new-inventory calls,
-built from the saved amounts.
+reverts `OldInventoryAlreadyDrained`, because the drained vaults read zero.
+Instead:
+
+1. Get the exact drained amounts: run the normal dry run with
+   `--fork-block-number <drain block - 1>`. The vaults were frozen there, so it
+   prints the amounts that the drain moved. Use these, not a saved `PREVIEW`
+   output and not hand-typed numbers.
+2. Add them as `"moved": [...]` to the plan, and run it with
+   `MIGRATION_MODE=resume`. It prints only the approve and new-inventory calls.
+   It reverts if every amount is zero, or if the admin does not hold an amount.
+   It cannot see an amount that is too low, which is why step 1 matters.
 
 ## 5. After the move
 
