@@ -5,6 +5,7 @@ pragma solidity ^0.8.25;
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
+import {Bytes} from "@openzeppelin/contracts/utils/Bytes.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IRaindexV6} from "raindex-interface-0.1.13/src/interface/deprecated/v6/IRaindexV6.sol";
@@ -77,6 +78,9 @@ library LibInventoryMigration {
     error OldInventoryAlreadyDrained();
     error OldInventoryPausedWithFunds(address token, bytes32 vaultId, uint256 balance);
     error NothingToResume();
+    error MoveAlreadyLanded();
+    error NewInventoryNotFresh();
+    error NotADrain();
     error AdminBalanceShort(address token, uint256 needed, uint256 held);
     error OldInventoryNotDrained();
     error MovedLengthMismatch(uint256 vaults, uint256 moved);
@@ -98,7 +102,7 @@ library LibInventoryMigration {
             revert NotAddOrder5Call(index);
         }
         // The config is the first argument; the tasks after it are not needed.
-        OrderConfigV4 memory config = abi.decode(_args(addOrderCall), (OrderConfigV4));
+        OrderConfigV4 memory config = abi.decode(Bytes.slice(addOrderCall, 4), (OrderConfigV4));
         return OrderV4(owner, config.evaluable, config.validInputs, config.validOutputs, config.nonce);
     }
 
@@ -119,6 +123,9 @@ library LibInventoryMigration {
         for (uint256 i = 0; i < plan.tokens.length; i++) {
             moved[i] = rawVaultBalance(plan.oldInventory, plan.tokens[i], plan.vaultIds[i]);
         }
+        // Resume tells a landed move by its V7 orders and grants, so they must
+        // not exist before the move.
+        if (_alreadyLanded(plan)) revert NewInventoryNotFresh();
         // A paused old inventory cannot be drained. If its vaults are empty,
         // the drain already ran, and a move built now would deposit nothing:
         // resume from the drained amounts instead (`resumeCalls`). If not,
@@ -192,7 +199,7 @@ library LibInventoryMigration {
     function calls(MigrationPlan memory plan, uint256[] memory moved) internal view returns (AdminCall[] memory out) {
         (address[] memory approveTokens, uint256[] memory approveTotals) = _tokenTotals(plan, moved);
         out = new AdminCall[](2 + approveTokens.length);
-        out[0] = AdminCall(plan.oldInventory, abi.encodeCall(Multicall.multicall, (_oldInventoryCalls(plan, moved))));
+        out[0] = AdminCall(plan.oldInventory, _drainCalldata(plan, moved));
         for (uint256 i = 0; i < approveTokens.length; i++) {
             out[1 + i] =
                 AdminCall(approveTokens[i], abi.encodeCall(IERC20.approve, (plan.newInventory, approveTotals[i])));
@@ -201,31 +208,99 @@ library LibInventoryMigration {
             AdminCall(plan.newInventory, abi.encodeCall(Multicall.multicall, (_newInventoryCalls(plan, moved))));
     }
 
-    /// @notice After the drain landed: the approve and new-inventory calls
-    /// from the saved `moved` amounts, without the drain. Reverts unless the
-    /// old inventory is paused (drained).
-    function resumeCalls(MigrationPlan memory plan, uint256[] memory moved, address admin)
+    /// @notice The amounts that a drain moved, decoded from its calldata: the
+    /// `oldInventory.multicall` input of the drain transaction (`cast tx <hash>
+    /// input` for an EOA admin). Every entry must be a `withdraw4` of a plan
+    /// vault or the final `pause()`, and the drain rebuilt from the decoded
+    /// amounts must equal `signedDrain` byte for byte.
+    function movedFromDrain(MigrationPlan memory plan, bytes memory signedDrain)
         internal
         view
-        returns (AdminCall[] memory out)
+        returns (uint256[] memory moved)
+    {
+        // Truncating to the leading 4 bytes is the point: that is the selector.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        if (signedDrain.length < 4 || bytes4(signedDrain) != Multicall.multicall.selector) revert NotADrain();
+        bytes[] memory batch = abi.decode(Bytes.slice(signedDrain, 4), (bytes[]));
+        moved = new uint256[](plan.tokens.length);
+        for (uint256 k = 0; k < batch.length; k++) {
+            // Truncating to the leading 4 bytes is the point: that is the selector.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            if (batch[k].length < 4 || bytes4(batch[k]) != IRaindexV6.withdraw4.selector) continue;
+            (uint256 index, uint256 raw) = _decodeWithdraw(plan, batch[k]);
+            moved[index] = raw;
+        }
+        if (keccak256(_drainCalldata(plan, moved)) != keccak256(signedDrain)) revert NotADrain();
+    }
+
+    /// @notice After the drain landed: the approve and new-inventory calls,
+    /// from the amounts in the signed drain (`movedFromDrain`). Reverts unless
+    /// the old inventory is paused with every plan vault empty, unless the
+    /// new-inventory multicall has not landed yet (no live V7 plan order, no
+    /// granted plan operator), unless it has something to do, and unless the
+    /// admin holds every token total. A plan with funds but no orders and no
+    /// grants cannot show that it landed; for a rerun of such a plan the
+    /// simulated `verify` in `MigrateInventory` fails on the doubled deposit.
+    function resumeCalls(MigrationPlan memory plan, address admin, bytes memory signedDrain)
+        internal
+        view
+        returns (AdminCall[] memory out, uint256[] memory moved)
     {
         if (!Pausable(plan.oldInventory).paused()) revert OldInventoryNotDrained();
         checkPlan(plan);
-        if (moved.length != plan.tokens.length) revert MovedLengthMismatch(plan.tokens.length, moved.length);
-        if (_nonZero(moved) == 0) revert NothingToResume();
-        AdminCall[] memory all = calls(plan, moved);
-        // The admin must still hold every drained amount. This catches an
-        // amount copied too high; one copied too low is caught only by taking
-        // the amounts from a dry run pinned to the block before the drain.
-        for (uint256 i = 1; i + 1 < all.length; i++) {
-            (, uint256 needed) = abi.decode(_args(all[i].data), (address, uint256));
-            uint256 held = IERC20(all[i].target).balanceOf(admin);
-            if (held < needed) revert AdminBalanceShort(all[i].target, needed, held);
+        for (uint256 i = 0; i < plan.tokens.length; i++) {
+            uint256 left = rawVaultBalance(plan.oldInventory, plan.tokens[i], plan.vaultIds[i]);
+            if (left != 0) revert OldInventoryPausedWithFunds(plan.tokens[i], plan.vaultIds[i], left);
         }
+        moved = movedFromDrain(plan, signedDrain);
+        if (_alreadyLanded(plan)) revert MoveAlreadyLanded();
+        if (_nonZero(moved) + plan.addOrderCalls.length + plan.grantOperators.length == 0) revert NothingToResume();
+        (address[] memory tokens, uint256[] memory totals) = _tokenTotals(plan, moved);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 held = IERC20(tokens[i]).balanceOf(admin);
+            if (held < totals[i]) revert AdminBalanceShort(tokens[i], totals[i], held);
+        }
+        AdminCall[] memory all = calls(plan, moved);
         out = new AdminCall[](all.length - 1);
         for (uint256 i = 0; i < out.length; i++) {
             out[i] = all[i + 1];
         }
+    }
+
+    /// @dev Whether the new-inventory multicall already landed: it is atomic,
+    /// so a live V7 plan order or a granted plan operator proves it. The
+    /// normal run (`amounts`) refuses a new inventory that has either before
+    /// the move, so neither exists before it.
+    function _alreadyLanded(MigrationPlan memory plan) private view returns (bool) {
+        for (uint256 i = 0; i < plan.addOrderCalls.length; i++) {
+            bytes32 hash = orderHash(addedOrder(plan.addOrderCalls[i], plan.newInventory, i));
+            if (IRaindexV7(plan.newInventory).orderExists(hash)) return true;
+        }
+        for (uint256 i = 0; i < plan.grantOperators.length; i++) {
+            if (IAccessControl(plan.newInventory).hasRole(OPERATOR_ROLE, plan.grantOperators[i])) return true;
+        }
+        return false;
+    }
+
+    /// @dev The plan vault and raw amount of one `withdraw4` call. Only the
+    /// leading static arguments are decoded; the empty tasks after them are
+    /// checked by the byte-for-byte rebuild.
+    function _decodeWithdraw(MigrationPlan memory plan, bytes memory withdraw)
+        private
+        view
+        returns (uint256 index, uint256 raw)
+    {
+        (address token, bytes32 vaultId, Float target) = abi.decode(Bytes.slice(withdraw, 4), (address, bytes32, Float));
+        index = _vaultIndex(plan, token, vaultId);
+        //slither-disable-next-line unused-return
+        (raw,) = target.toFixedDecimalLossy(IERC20Metadata(token).decimals());
+    }
+
+    function _vaultIndex(MigrationPlan memory plan, address token, bytes32 vaultId) private pure returns (uint256) {
+        for (uint256 i = 0; i < plan.tokens.length; i++) {
+            if (plan.tokens[i] == token && plan.vaultIds[i] == vaultId) return i;
+        }
+        revert NotADrain();
     }
 
     /// @notice Reverts unless the end state is the planned one: every vault
@@ -267,6 +342,10 @@ library LibInventoryMigration {
             uint256 got = rawVaultBalance(plan.newInventory, plan.tokens[i], plan.vaultIds[i]);
             if (got != moved[i]) revert VaultNotMoved(plan.tokens[i], plan.vaultIds[i], moved[i], got);
         }
+    }
+
+    function _drainCalldata(MigrationPlan memory plan, uint256[] memory moved) private view returns (bytes memory) {
+        return abi.encodeCall(Multicall.multicall, (_oldInventoryCalls(plan, moved)));
     }
 
     function _oldInventoryCalls(MigrationPlan memory plan, uint256[] memory moved)
@@ -328,14 +407,6 @@ library LibInventoryMigration {
         assembly ("memory-safe") {
             mstore(tokens, tokenCount)
             mstore(totals, tokenCount)
-        }
-    }
-
-    /// @dev The ABI-encoded arguments of `call`, without its selector.
-    function _args(bytes memory call) private pure returns (bytes memory args) {
-        args = new bytes(call.length - 4);
-        for (uint256 i = 0; i < args.length; i++) {
-            args[i] = call[i + 4];
         }
     }
 

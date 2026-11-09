@@ -106,8 +106,8 @@ end-state check. Wait for each transaction to confirm before the next.
    `oldInventory.multicall`, which revokes the old operators and removes the
    live orders. Sign it. After it, only the admin can change the old vaults.
 3. Run the dry run again. It now prints `SIGN NOW, in order` and reads the
-   amounts from the frozen vaults, so they are exact. Save its output: the
-   amounts are the `moved` values. Sign its transactions in order:
+   amounts from the frozen vaults, so they are exact. Sign its transactions in
+   order:
    1. `oldInventory.multicall`: withdraw every vault to the admin, and
       `pause()`. If a vault holds less than the amount, the batch reverts and
       nothing moves.
@@ -118,24 +118,33 @@ end-state check. Wait for each transaction to confirm before the next.
 Between the drain and the last transaction, the admin wallet holds the whole
 pool. Sign them back to back. A sub-raw-unit remainder of a vault stays on V6.
 
+Resume is only for a move that stopped after the drain. Never run it again after
+the move finished.
+
 If the move stops after the drain, do not run the normal dry run again: it
 reverts `OldInventoryAlreadyDrained`, because the drained vaults read zero.
 Instead:
 
-1. Get the exact drained amounts: run the normal dry run with
-   `--fork-block-number <drain block - 1>`. The vaults were frozen there, so it
-   prints the amounts that the drain moved. Use these, not a saved `PREVIEW`
-   output and not hand-typed numbers.
-2. Add them as `"moved": [...]` to the plan, and run it with
-   `MIGRATION_MODE=resume`. It prints only the approve and new-inventory calls.
-   It reverts if every amount is zero, or if the admin does not hold an amount.
-   It cannot see an amount that is too low, which is why step 1 matters.
+1. Find the landed drain transaction and copy the calldata it delivered to the
+   old inventory. For an EOA admin, that is the transaction input:
+   `cast tx <hash> input --rpc-url "$RPC_URL"`. For a Safe or a timelock, it is
+   the inner `data` of the call to the old inventory. Copy it from the chain,
+   never from script output: a `PREVIEW` run prints a different drain.
+2. Add it as `"drainCalldata": "0x…"` to the plan, and run it with
+   `MIGRATION_MODE=resume`. The script reads the amounts from the drain itself
+   and rebuilds it to check that it is a drain of this plan. It reverts if a
+   plan vault on the old inventory still holds funds, if the move already landed
+   (a V7 plan order is live or a plan operator holds the role), if there is
+   nothing to do, or if the admin no longer holds a token total. Then it prints
+   the amounts and only the approve and new-inventory calls to sign.
 
 ## 5. After the move
 
 1. Right after the last transaction confirms, before anything can trade on V7,
-   check the live end state. Add the saved amounts as `"moved": [...]` to the
-   plan, and run check mode on a fork pinned to that transaction's block:
+   check the live end state. Add the input of the landed drain as
+   `"drainCalldata": "0x…"` to the plan (step 1 of the resume steps above says
+   how to get it); check mode reads the amounts from it. Run it on a fork pinned
+   to the last transaction's block:
    `MIGRATION_MODE=check MIGRATION_PLAN=.tmp/plan.json forge script script/MigrateInventory.sol --fork-url "$RPC_URL" --fork-block-number <block>`.
    It must print `check: live end state verified`. It checks the old side first
    (nothing left on V6), so a later run on a trading pool can fail only on the
