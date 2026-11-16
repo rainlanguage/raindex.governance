@@ -14,21 +14,21 @@ integrity = "fa706c8a7caf3426c90f75e6aafa3224b0a6c899b490800cf6944e4ec42f9344"
 
 [[dependencies]]
 name = "rain-math-float"
-version = "0.3.11"
-url = "https://soldeer-revisions.s3.amazonaws.com/rain-math-float/0_3_11_26-10-2026_20:00:56_rain.math.zip"
-checksum = "0ba0c7f877b418a3905e0a974176d02a2b1e438ad61cd5fd7ba36c0c7ee2c482"
-integrity = "b6900769eac19e9d23413a8950318ccaade1ca292d1743737771e71cc624b8a4"
+version = "0.3.12"
+url = "https://soldeer-revisions.s3.amazonaws.com/rain-math-float/0_3_12_15-11-2026_12:44:12_rain.math.zip"
+checksum = "65e449f11b6ab8efa461d1f8cdabd3ae53984fa2b09be603e5c26ba0d585294a"
+integrity = "840586549e86c98f5e1e47fd0450db1f9e1ef369999fbd514518e937b57ff8d7"
 
 [[dependencies]]
 name = "raindex-interface"
-version = "0.1.13"
-url = "https://soldeer-revisions.s3.amazonaws.com/raindex-interface/0_1_13_27-10-2026_00:27:20_raindex.zip"
-checksum = "8b5a0edff4f6a3631403361c95b30957e13c438fe2fdd789dcd3f269c6b19c43"
-integrity = "483f99e0479535447feac0e4c2143994456ff08de08b7693a8d7bdf9b1c89cd5"
+version = "0.1.14"
+url = "https://soldeer-revisions.s3.amazonaws.com/raindex-interface/0_1_14_16-11-2026_14:08:26_raindex.zip"
+checksum = "0f62af7948fd30f0cd9e05296e17a2285dc32dd9cdeb9c9432148ab65bd32aee"
+integrity = "4b33fa1910cecc1138a77e2a2681477490c588a9c00b3c9ac1c0c44ca2775c8a"
 
 [[dependencies]]
 name = "rainlang"
-version = "0.2.30"
-url = "https://soldeer-revisions.s3.amazonaws.com/rainlang/0_2_30_26-10-2026_22:48:08_rainlang.zip"
-checksum = "859e9c2122e95f78c4eecaf6c47e8a07f63a4353680056cd4d47a69986a3e3ec"
-integrity = "453dc13a29feec6fe94b6da6e69b7129ac1258db55e2096125dbf12761441caa"
+version = "0.2.36"
+url = "https://soldeer-revisions.s3.amazonaws.com/rainlang/0_2_36_16-11-2026_13:52:39_rainlang.zip"
+checksum = "d315246f5e14cd76346c7b6cacf0025e7b70c04aa626e773df330c745ec0dc03"
+integrity = "61a281ed78610233c87beb7ea35e31c206997040b4488a2b6bde97cc646c6142"
