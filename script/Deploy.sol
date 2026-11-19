@@ -17,6 +17,7 @@ bytes32 constant SUITE_BSC = keccak256("bsc");
 bytes32 constant SUITE_ETHEREUM = keccak256("ethereum");
 bytes32 constant SUITE_HYPEREVM = keccak256("hyperevm");
 bytes32 constant SUITE_ROBINHOOD = keccak256("robinhood");
+bytes32 constant SUITE_ZEROG = keccak256("zerog");
 
 /// @title Deploy
 /// @notice Manual (`workflow_dispatch`) deploy of a fresh `RaindexInventory`.
@@ -55,6 +56,9 @@ contract Deploy is Script {
         } else if (suite == SUITE_ROBINHOOD) {
             rpcEndpoint = "robinhood";
             expectedChainId = 4663;
+        } else if (suite == SUITE_ZEROG) {
+            rpcEndpoint = "zerog";
+            expectedChainId = 16661;
         } else {
             revert("Unknown deployment suite");
         }

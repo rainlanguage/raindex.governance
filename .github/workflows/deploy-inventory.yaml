@@ -19,6 +19,7 @@ on:
           - ethereum
           - hyperevm
           - robinhood
+          - zerog
       admin:
         description: "DEFAULT_ADMIN_ROLE holder — the inventory owner"
         required: true
@@ -35,7 +36,7 @@ on:
         type: boolean
       verify:
         description: >-
-          Verify on the block explorer after broadcasting. Etherscan V2 covers every network here except Robinhood Chain (4663), which Etherscan does not index; that network verifies through Sourcify instead (Blockscout, its explorer, imports Sourcify matches).
+          Verify on the block explorer after broadcasting. Etherscan V2 covers every network here except Robinhood Chain (4663) and 0G (16661), which Etherscan does not index. Robinhood Chain verifies through Sourcify instead (Blockscout, its explorer, imports Sourcify matches); 0G verifies through its chainscan API (foundry.toml [etherscan] entry).
         required: false
         default: true
         type: boolean
@@ -67,8 +68,13 @@ jobs:
           ETHEREUM_RPC_URL: ${{ secrets.RPC_URL_ETHEREUM_FORK || vars.RPC_URL_ETHEREUM_FORK || '' }}
           HYPEREVM_RPC_URL: ${{ secrets.RPC_URL_HYPEREVM_FORK || vars.RPC_URL_HYPEREVM_FORK || '' }}
           ROBINHOOD_RPC_URL: ${{ secrets.RPC_URL_ROBINHOOD_FORK || vars.RPC_URL_ROBINHOOD_FORK || '' }}
+          ZEROG_RPC_URL: ${{ secrets.RPC_URL_ZEROG_FORK || vars.RPC_URL_ZEROG_FORK || '' }}
           CI_DEPLOY_BASE_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BASE_SEPOLIA_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_BSC_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_BSC_ETHERSCAN_API_KEY || vars.CI_DEPLOY_BSC_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_ETHEREUM_ETHERSCAN_API_KEY || '' }}
           CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY: ${{ secrets.EXPLORER_VERIFICATION_KEY || secrets.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || vars.CI_DEPLOY_HYPEREVM_ETHERSCAN_API_KEY || '' }}
+          # 0G's chainscan ignores the key, but forge drops an [etherscan] entry
+          # whose key is empty, so this one defaults to a placeholder and never
+          # takes the shared Etherscan V2 key.
+          CI_DEPLOY_ZEROG_ETHERSCAN_API_KEY: ${{ secrets.CI_DEPLOY_ZEROG_ETHERSCAN_API_KEY || vars.CI_DEPLOY_ZEROG_ETHERSCAN_API_KEY || 'PLACEHOLDER' }}
