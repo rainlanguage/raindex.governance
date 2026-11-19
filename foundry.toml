@@ -22,9 +22,9 @@ recursive_deps = false
 
 [dependencies]
 forge-std = "1.17.0"
-rainlang = "0.2.39"
+rainlang = "0.2.40"
 rain-math-float = "0.3.13"
-raindex-interface = "0.1.16"
+raindex-interface = "0.1.17"
 "@openzeppelin-contracts" = "5.7.0"
 
 [rpc_endpoints]
